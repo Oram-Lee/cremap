@@ -1,0 +1,327 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>빌딩 위치 지도</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        .building-list {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            max-width: 300px;
+            max-height: 70%;
+            overflow-y: auto;
+            z-index: 2;
+        }
+        .building-item {
+            margin: 8px 0;
+            font-size: 13px;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(255,255,255,0.9);
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 10;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        #error-msg {
+            display: none;
+            padding: 20px;
+            background-color: #ffdddd;
+            color: #ff0000;
+            margin: 20px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .timestamp {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(255,255,255,0.8);
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 2;
+        }
+        #download-btn {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 10px 15px;
+            font-size: 14px;
+            cursor: pointer;
+            z-index: 2;
+        }
+        #download-btn:hover {
+            background-color: #3367D6;
+        }
+        .github-info {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255,255,255,0.8);
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 2;
+            text-align: center;
+            max-width: 500px;
+        }
+        /* 숫자 마커 스타일 */
+        .number-marker {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background-color: #3399FF;
+            color: white;
+            font-weight: bold;
+            border: 2px solid #FFFFFF;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+        /* 툴팁 스타일 */
+        .tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">지도를 로딩 중입니다...</div>
+    <div id="error-msg">
+        카카오맵을 로드할 수 없습니다.<br>
+        인터넷 연결을 확인해주세요.
+    </div>
+    <div id="map"></div>
+    <div class="building-list">
+        <h3>선택된 빌딩 (4개)</h3>
+        <div class='building-item'>
+                <b>1. 디타워 광화문 D1</b><br>
+                <small>서울특별시 종로구 종로3길 17</small>
+            </div><div class='building-item'>
+                <b>2. 시그니쳐 타워</b><br>
+                <small>서울특별시 중구 청계천로 100</small>
+            </div><div class='building-item'>
+                <b>3. 페럼타워</b><br>
+                <small>서울시 중구 을지로5길 19</small>
+            </div><div class='building-item'>
+                <b>4. 그랑서울 타워2</b><br>
+                <small>서울시 종로구 종로33</small>
+            </div>
+    </div>
+    <button id="download-btn">HTML 파일 다운로드</button>
+    <div class="timestamp">생성일시: 2025-04-30 00:04:21</div>
+    <div class="github-info">GitHub: <a href="https://github.com/Oram-Lee/cremap" target="_blank">Oram-Lee/cremap</a></div>
+
+    <!-- 카카오맵 SDK 로드 (수정된 방식) -->
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=1ac6eee9b1e4c2e0cc6f1d1ca1a6a559"></script>
+
+    <!-- 빌딩 데이터 스크립트 -->
+    <script>
+        var BUILDING_DATA = [{"name": "디타워 광화문 D1", "address": "서울특별시 종로구 종로3길 17", "lat": 37.572, "lng": 126.9821, "idx": 3}, {"name": "시그니쳐 타워", "address": "서울특별시 중구 청계천로 100", "lat": 37.5701, "lng": 126.9829, "idx": 1}, {"name": "페럼타워", "address": "서울시 중구 을지로5길 19", "lat": 37.5664, "lng": 126.9846, "idx": 4}, {"name": "그랑서울 타워2", "address": "서울시 종로구 종로33", "lat": 37.5707, "lng": 126.9816, "idx": 5}];
+        
+        // 에러 처리 함수
+        function handleError() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error-msg').style.display = 'block';
+            console.error('카카오맵 SDK를 로드할 수 없습니다.');
+        }
+        
+        // 숫자 마커 생성 함수
+        function createNumberMarker(number) {
+            var div = document.createElement('div');
+            div.className = 'number-marker';
+            div.textContent = number;
+            return div;
+        }
+        
+        // 툴팁 생성 함수
+        function createTooltip(text) {
+            var tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            tooltip.textContent = text;
+            document.body.appendChild(tooltip);
+            return tooltip;
+        }
+        
+        // 지도 초기화 함수
+        function initMap() {
+            try {
+                // 로딩 중 표시 제거
+                document.getElementById('loading').style.display = 'none';
+                
+                // 지도 컨테이너
+                var mapContainer = document.getElementById('map');
+                
+                // 지도 옵션
+                var mapOption = {
+                    center: new kakao.maps.LatLng(37.566826, 126.9786567),
+                    level: 7
+                };
+                
+                // 지도 생성
+                var map = new kakao.maps.Map(mapContainer, mapOption);
+                
+                // 지도 영역 객체
+                var bounds = new kakao.maps.LatLngBounds();
+                
+                // 마커와 툴팁 배열
+                var markers = [];
+                var tooltips = [];
+                
+                // HTML 다운로드 버튼 이벤트 설정
+                document.getElementById('download-btn').addEventListener('click', function() {
+                    var blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'});
+                    var url = URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'building_map.html';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                });
+                
+                // 빌딩 데이터 순회하여 마커 생성 (숫자 마커 + 툴팁 사용)
+                BUILDING_DATA.forEach(function(building, index) {
+                    // 좌표 직접 사용
+                    var position = new kakao.maps.LatLng(building.lat, building.lng);
+                    
+                    // 숫자 마커 엘리먼트 생성 (순차적 번호 적용: 1부터 시작)
+                    var markerElement = createNumberMarker(index + 1);
+                    
+                    // 커스텀 오버레이 생성 (숫자 마커 표시용)
+                    var marker = new kakao.maps.CustomOverlay({
+                        position: position,
+                        content: markerElement,
+                        map: map,
+                        yAnchor: 0.5,
+                        xAnchor: 0.5
+                    });
+                    
+                    // 툴팁 생성
+                    var tooltip = createTooltip(building.name);
+                    
+                    // 마커에 마우스 올렸을 때 툴팁 표시
+                    markerElement.addEventListener('mouseover', function(e) {
+                        var rect = this.getBoundingClientRect();
+                        tooltip.style.left = (rect.left + window.scrollX) + 'px';
+                        tooltip.style.top = (rect.top + window.scrollY - 30) + 'px';
+                        tooltip.style.opacity = '1';
+                    });
+                    
+                    // 마우스 벗어날 때 툴팁 숨기기
+                    markerElement.addEventListener('mouseout', function() {
+                        tooltip.style.opacity = '0';
+                    });
+                    
+                    // 마커 클릭 시 정보창 표시
+                    markerElement.addEventListener('click', function() {
+                        // 정보창 내용
+                        var infoContent = '<div style="padding:8px;width:220px;text-align:left;font-size:12px;">' + 
+                                        '<strong>' + (index + 1) + '. ' + building.name + '</strong><br>' +
+                                        '<div style="margin-top:5px;font-size:12px;color:#666;">' + building.address + '</div></div>';
+                        
+                        // 정보창 생성 및 표시
+                        var infowindow = new kakao.maps.InfoWindow({
+                            content: infoContent,
+                            position: position,
+                            removable: true
+                        });
+                        
+                        infowindow.open(map);
+                    });
+                    
+                    // 지도 영역에 좌표 추가
+                    bounds.extend(position);
+                    
+                    // 마커 배열에 추가
+                    markers.push(marker);
+                    tooltips.push(tooltip);
+                    
+                    // 모든 마커가 추가되면 지도 영역 설정
+                    if (markers.length === BUILDING_DATA.length) {
+                        map.setBounds(bounds);
+                    }
+                });
+                
+                console.log('지도 초기화 완료');
+            } catch (e) {
+                // 오류 발생 시 처리
+                console.error('지도 초기화 오류:', e);
+                handleError();
+            }
+        }
+        
+        // 페이지 로드 완료 후 초기화 함수 호출
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM 로드 완료, 지도 초기화 준비');
+            
+            // 카카오맵 SDK가 로드되었는지 확인
+            if (typeof kakao !== 'undefined' && kakao.maps) {
+                console.log('카카오맵 SDK 로드 확인됨');
+                initMap();
+            } else {
+                console.log('카카오맵 SDK 로드 대기 중...');
+                // SDK 로딩 완료 대기
+                var checkInterval = setInterval(function() {
+                    if (typeof kakao !== 'undefined' && kakao.maps) {
+                        clearInterval(checkInterval);
+                        console.log('카카오맵 SDK 로드 완료');
+                        initMap();
+                    }
+                }, 100);
+                
+                // 일정 시간 후에도 로드 실패 시 에러 처리
+                setTimeout(function() {
+                    clearInterval(checkInterval);
+                    if (typeof kakao === 'undefined' || !kakao.maps) {
+                        console.error('카카오맵 SDK 로드 실패');
+                        handleError();
+                    }
+                }, 5000);
+            }
+        });
+    </script>
+</body>
+</html>
