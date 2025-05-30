@@ -357,7 +357,7 @@ showDetail(index) {
     const item = DataManager.currentResults[index];
     
     // PDF 검색 매니저 사용
-    if (typeof windowPDFSearchManager !== 'undefined') {
+    if (typeof PDFSearchManager !== 'undefined') {
         PDFSearchManager.openPDFWithSearch({
             빌딩명: item.빌딩명,
             출처회사: item.출처회사,
