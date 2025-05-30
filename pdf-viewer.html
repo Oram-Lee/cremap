@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 뷰어 - 자동 검색</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #header {
+            background: #f5f5f5;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        #searchBox {
+            padding: 5px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 300px;
+        }
+        
+        button {
+            padding: 5px 15px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        #pageInfo {
+            margin-left: auto;
+            color: #666;
+        }
+        
+        #viewerContainer {
+            flex: 1;
+            overflow: auto;
+            background: #525252;
+            position: relative;
+        }
+        
+        #pdfViewer {
+            margin: 0 auto;
+        }
+        
+        .highlight {
+            background-color: yellow;
+            opacity: 0.5;
+        }
+        
+        #loadingMessage {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <input type="text" id="searchBox" placeholder="빌딩명 검색...">
+        <button onclick="searchPDF()">검색</button>
+        <button onclick="previousMatch()">이전</button>
+        <button onclick="nextMatch()">다음</button>
+        <button onclick="zoomIn()">확대</button>
+        <button onclick="zoomOut()">축소</button>
+        <span id="pageInfo">페이지: <span id="currentPage">0</span> / <span id="totalPages">0</span></span>
+    </div>
+    
+    <div id="viewerContainer">
+        <div id="loadingMessage">PDF 로딩 중...</div>
+        <canvas id="pdfViewer"></canvas>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        // PDF.js 워커 설정
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        let pdfDoc = null;
+        let currentPage = 1;
+        let currentScale = 1.5;
+        let searchResults = [];
+        let currentSearchIndex = 0;
+        let canvas = document.getElementById('pdfViewer');
+        let ctx = canvas.getContext('2d');
+        
+        // URL 파라미터 파싱
+        function getUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                file: params.get('file'),
+                search: params.get('search')
+            };
+        }
+        
+        // PDF 로드
+        async function loadPDF() {
+            const params = getUrlParams();
+            if (!params.file) {
+                document.getElementById('loadingMessage').textContent = 'PDF 파일이 지정되지 않았습니다.';
+                return;
+            }
+            
+            try {
+                // PDF 로드
+                const loadingTask = pdfjsLib.getDocument(`./pdfs/${params.file}`);
+                pdfDoc = await loadingTask.promise;
+                
+                document.getElementById('totalPages').textContent = pdfDoc.numPages;
+                document.getElementById('loadingMessage').style.display = 'none';
+                
+                // 첫 페이지 렌더링
+                await renderPage(currentPage);
+                
+                // 검색어가 있으면 자동 검색
+                if (params.search) {
+                    document.getElementById('searchBox').value = decodeURIComponent(params.search);
+                    await searchPDF();
+                }
+            } catch (error) {
+                console.error('PDF 로드 오류:', error);
+                document.getElementById('loadingMessage').textContent = 'PDF 로드 실패: ' + error.message;
+            }
+        }
+        
+        // 페이지 렌더링
+        async function renderPage(pageNum) {
+            const page = await pdfDoc.getPage(pageNum);
+            const viewport = page.getViewport({ scale: currentScale });
+            
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            
+            const renderContext = {
+                canvasContext: ctx,
+                viewport: viewport
+            };
+            
+            await page.render(renderContext).promise;
+            document.getElementById('currentPage').textContent = pageNum;
+        }
+        
+        // PDF 내 텍스트 검색
+        async function searchPDF() {
+            const searchTerm = document.getElementById('searchBox').value.trim();
+            if (!searchTerm || !pdfDoc) return;
+            
+            searchResults = [];
+            
+            // 모든 페이지에서 검색
+            for (let i = 1; i <= pdfDoc.numPages; i++) {
+                const page = await pdfDoc.getPage(i);
+                const textContent = await page.getTextContent();
+                const text = textContent.items.map(item => item.str).join(' ');
+                
+                if (text.toLowerCase().includes(searchTerm.toLowerCase())) {
+                    searchResults.push({
+                        page: i,
+                        text: text,
+                        searchTerm: searchTerm
+                    });
+                }
+            }
+            
+            if (searchResults.length > 0) {
+                currentSearchIndex = 0;
+                await goToSearchResult(0);
+                alert(`'${searchTerm}' 검색 결과: ${searchResults.length}개 페이지에서 발견`);
+            } else {
+                alert(`'${searchTerm}'을(를) 찾을 수 없습니다.`);
+            }
+        }
+        
+        // 검색 결과로 이동
+        async function goToSearchResult(index) {
+            if (searchResults.length === 0) return;
+            
+            const result = searchResults[index];
+            currentPage = result.page;
+            await renderPage(currentPage);
+            
+            // 검색어 하이라이트 (간단한 구현)
+            // 실제로는 PDF.js의 텍스트 레이어를 사용하면 더 정확한 하이라이트 가능
+            console.log(`${result.page}페이지에서 '${result.searchTerm}' 발견`);
+        }
+        
+        // 다음 검색 결과
+        function nextMatch() {
+            if (searchResults.length === 0) return;
+            currentSearchIndex = (currentSearchIndex + 1) % searchResults.length;
+            goToSearchResult(currentSearchIndex);
+        }
+        
+        // 이전 검색 결과
+        function previousMatch() {
+            if (searchResults.length === 0) return;
+            currentSearchIndex = (currentSearchIndex - 1 + searchResults.length) % searchResults.length;
+            goToSearchResult(currentSearchIndex);
+        }
+        
+        // 확대
+        function zoomIn() {
+            currentScale *= 1.2;
+            renderPage(currentPage);
+        }
+        
+        // 축소
+        function zoomOut() {
+            currentScale *= 0.8;
+            renderPage(currentPage);
+        }
+        
+        // 키보드 단축키
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'f') {
+                e.preventDefault();
+                document.getElementById('searchBox').focus();
+            }
+        });
+        
+        // Enter 키로 검색
+        document.getElementById('searchBox').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                searchPDF();
+            }
+        });
+        
+        // 페이지 로드 시 PDF 로드
+        window.addEventListener('load', loadPDF);
+    </script>
+</body>
+</html>
