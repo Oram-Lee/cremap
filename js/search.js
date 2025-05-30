@@ -371,7 +371,7 @@ showDetail(index) {
             alert(`PDF 뷰어를 준비 중입니다.\n\n빌딩명: ${item.빌딩명}\n출처: ${item.출처회사}`);
         }
     }
-}
+},
     
     // 검색 초기화
     resetSearch() {
