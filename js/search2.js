@@ -352,17 +352,26 @@ const SearchManager = {
         DataManager.toggleBuildingSelection(buildingData);
     },
     
-    // 상세보기 - PDF 열기로 변경
-    showDetail(index) {
-        const item = DataManager.currentResults[index];
-        
-        // PDFManager를 통해 PDF 열기
+    // 상세보기 - PDF 열기
+showDetail(index) {
+    const item = DataManager.currentResults[index];
+    
+    // PDF 검색 매니저 사용
+    if (typeof PDFSearchManager !== 'undefined') {
+        PDFSearchManager.openPDFWithSearch({
+            빌딩명: item.빌딩명,
+            출처회사: item.출처회사,
+            주소: item.주소
+        });
+    } else {
+        // PDFSearchManager가 없으면 기존 방식 사용
         if (PDFManager && PDFManager.openPDFInNewWindow) {
             PDFManager.openPDFInNewWindow(item);
         } else {
             alert(`PDF 뷰어를 준비 중입니다.\n\n빌딩명: ${item.빌딩명}\n출처: ${item.출처회사}`);
         }
-    },
+    }
+}
     
     // 검색 초기화
     resetSearch() {
