@@ -313,7 +313,7 @@ const SearchManager = {
             const isSelected = DataManager.selectedBuildings.has(buildingKey);
             
             // PDF 상태 확인
-            const pdfStatus = PDFManager.checkPdfAvailability(item.빌딩명, item.출처회사);
+            const hasPdf = PDFManager.hasPDF(item['빌딩명'], item['출처회사']);
             
             // PDF 버튼 스타일 및 아이콘
             const pdfButtonClass = {
