@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 뷰어 - CRE 빌딩 검색</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    
+    <style>
+        /* 전체 레이아웃 */
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        /* 헤더 스타일 */
+        .pdf-header {
+            background: #2c3e50;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            height: 60px;
+        }
+        
+        .pdf-title {
+            font-size: 18px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .pdf-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        /* 검색 바 */
+        .search-container {
+            display: flex;
+            align-items: center;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            padding: 5px 10px;
+        }
+        
+        .search-input {
+            background: none;
+            border: none;
+            color: white;
+            outline: none;
+            width: 200px;
+            font-size: 14px;
+        }
+        
+        .search-input::placeholder {
+            color: rgba(255,255,255,0.7);
+        }
+        
+        .search-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .search-buttons button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 3px;
+            transition: background 0.2s;
+        }
+        
+        .search-buttons button:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        /* 페이지 네비게이션 */
+        .page-navigation {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255,255,255,0.1);
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        
+        .page-input {
+            width: 50px;
+            text-align: center;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            border-radius: 3px;
+            padding: 3px;
+        }
+        
+        /* 줌 컨트롤 */
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .zoom-select {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            border-radius: 3px;
+            padding: 5px;
+            cursor: pointer;
+        }
+        
+        .zoom-select option {
+            background: #2c3e50;
+        }
+        
+        /* 메인 컨테이너 */
+        .pdf-container {
+            display: flex;
+            height: calc(100vh - 60px);
+            position: relative;
+        }
+        
+        /* 사이드바 */
+        .sidebar {
+            width: 250px;
+            background: white;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+            transition: margin-left 0.3s;
+        }
+        
+        .sidebar.hidden {
+            margin-left: -250px;
+        }
+        
+        .sidebar-header {
+            padding: 15px;
+            border-bottom: 1px solid #ddd;
+            font-weight: 500;
+            background: #f8f9fa;
+        }
+        
+        .search-results {
+            max-height: 300px;
+            overflow-y: auto;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .search-result-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            transition: background 0.2s;
+        }
+        
+        .search-result-item:hover {
+            background: #f0f0f0;
+        }
+        
+        .search-result-item.active {
+            background: #e3f2fd;
+            border-left: 3px solid #2196F3;
+        }
+        
+        .result-page {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .result-text {
+            font-size: 14px;
+            color: #333;
+            margin-top: 3px;
+        }
+        
+        .highlight {
+            background: yellow;
+            font-weight: bold;
+        }
+        
+        /* 썸네일 */
+        .thumbnails {
+            padding: 15px;
+        }
+        
+        .thumbnail-item {
+            margin-bottom: 10px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+        
+        .thumbnail-item:hover {
+            border-color: #2196F3;
+        }
+        
+        .thumbnail-item.active {
+            border-color: #1976D2;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        .thumbnail-canvas {
+            width: 100%;
+            display: block;
+        }
+        
+        .thumbnail-label {
+            text-align: center;
+            padding: 5px;
+            background: #f8f9fa;
+            font-size: 12px;
+        }
+        
+        /* PDF 뷰어 영역 */
+        .pdf-viewer {
+            flex: 1;
+            overflow: auto;
+            background: #e0e0e0;
+            position: relative;
+        }
+        
+        .pdf-pages {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .pdf-page {
+            background: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        
+        .pdf-page canvas {
+            display: block;
+            max-width: 100%;
+        }
+        
+        /* 로딩 화면 */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255,255,255,0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #2196F3;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #666;
+        }
+        
+        .loading-progress {
+            width: 200px;
+            height: 4px;
+            background: #f0f0f0;
+            border-radius: 2px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        
+        .loading-progress-bar {
+            height: 100%;
+            background: #2196F3;
+            transition: width 0.3s;
+        }
+        
+        /* 에러 메시지 */
+        .error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            padding: 40px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .error-icon {
+            font-size: 48px;
+            color: #f44336;
+            margin-bottom: 20px;
+        }
+        
+        /* 검색 하이라이트 */
+        .textLayer {
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            opacity: 0.2;
+            line-height: 1;
+        }
+        
+        .textLayer .highlight {
+            background: rgba(255, 237, 0, 0.5);
+            border-radius: 2px;
+        }
+        
+        .textLayer .highlight.active {
+            background: rgba(255, 153, 0, 0.5);
+        }
+        
+        /* 검색 결과 하이라이트 스타일 추가 */
+        .textLayer span.search-highlight {
+            background-color: yellow;
+            opacity: 0.5;
+        }
+        
+        /* 툴팁 */
+        .tooltip-custom {
+            position: absolute;
+            background: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        
+        /* 모바일 대응 */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: absolute;
+                z-index: 100;
+                height: 100%;
+                box-shadow: 2px 0 4px rgba(0,0,0,0.1);
+            }
+            
+            .pdf-controls {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+            
+            .search-container {
+                order: 3;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 헤더 -->
+    <div class="pdf-header">
+        <div class="pdf-title">
+            <button id="toggleSidebar" class="btn btn-sm btn-outline-light">
+                <i class="bi bi-list"></i>
+            </button>
+            <span id="documentTitle">PDF 뷰어</span>
+        </div>
+        
+        <div class="pdf-controls">
+            <!-- 검색 -->
+            <div class="search-container">
+                <input type="text" 
+                       id="searchInput" 
+                       class="search-input" 
+                       placeholder="검색어 입력...">
+                <div class="search-buttons">
+                    <button id="searchPrev" title="이전 검색결과">
+                        <i class="bi bi-chevron-up"></i>
+                    </button>
+                    <button id="searchNext" title="다음 검색결과">
+                        <i class="bi bi-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 페이지 네비게이션 -->
+            <div class="page-navigation">
+                <button id="prevPage" class="btn btn-sm btn-outline-light">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                <input type="number" 
+                       id="pageNum" 
+                       class="page-input" 
+                       value="1" 
+                       min="1">
+                <span id="totalPages" style="color: rgba(255,255,255,0.8)">/ 1</span>
+                <button id="nextPage" class="btn btn-sm btn-outline-light">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
+            
+            <!-- 줌 컨트롤 -->
+            <div class="zoom-controls">
+                <button id="zoomOut" class="btn btn-sm btn-outline-light">
+                    <i class="bi bi-zoom-out"></i>
+                </button>
+                <select id="zoomSelect" class="zoom-select">
+                    <option value="0.5">50%</option>
+                    <option value="0.75">75%</option>
+                    <option value="1" selected>100%</option>
+                    <option value="1.25">125%</option>
+                    <option value="1.5">150%</option>
+                    <option value="2">200%</option>
+                    <option value="page-fit">페이지 맞춤</option>
+                    <option value="page-width">너비 맞춤</option>
+                </select>
+                <button id="zoomIn" class="btn btn-sm btn-outline-light">
+                    <i class="bi bi-zoom-in"></i>
+                </button>
+            </div>
+            
+            <!-- 추가 도구 -->
+            <button id="downloadPdf" class="btn btn-sm btn-outline-light" title="PDF 다운로드">
+                <i class="bi bi-download"></i>
+            </button>
+            <button id="printPdf" class="btn btn-sm btn-outline-light" title="인쇄">
+                <i class="bi bi-printer"></i>
+            </button>
+        </div>
+    </div>
+    
+    <!-- 메인 컨테이너 -->
+    <div class="pdf-container">
+        <!-- 사이드바 -->
+        <div class="sidebar" id="sidebar">
+            <!-- 검색 결과 -->
+            <div class="sidebar-header">
+                <i class="bi bi-search"></i> 검색 결과
+                <span id="searchCount" class="badge bg-primary float-end">0</span>
+            </div>
+            <div class="search-results" id="searchResults">
+                <div class="text-center text-muted p-3">
+                    검색어를 입력하세요
+                </div>
+            </div>
+            
+            <!-- 썸네일 -->
+            <div class="sidebar-header">
+                <i class="bi bi-grid-3x3-gap"></i> 페이지 썸네일
+            </div>
+            <div class="thumbnails" id="thumbnails">
+                <!-- 썸네일이 여기에 동적으로 추가됨 -->
+            </div>
+        </div>
+        
+        <!-- PDF 뷰어 -->
+        <div class="pdf-viewer" id="pdfViewer">
+            <!-- 로딩 화면 -->
+            <div class="loading-overlay" id="loadingOverlay">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">PDF를 불러오는 중...</div>
+                <div class="loading-progress">
+                    <div class="loading-progress-bar" id="loadingProgress"></div>
+                </div>
+            </div>
+            
+            <!-- PDF 페이지들 -->
+            <div class="pdf-pages" id="pdfPages">
+                <!-- PDF 페이지가 여기에 렌더링됨 -->
+            </div>
+            
+            <!-- 에러 메시지 -->
+            <div class="error-message" id="errorMessage" style="display: none;">
+                <div class="error-icon">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                </div>
+                <h4>PDF를 불러올 수 없습니다</h4>
+                <p id="errorText">파일을 찾을 수 없거나 손상되었습니다.</p>
+                <button class="btn btn-primary mt-3" onclick="location.reload()">
+                    다시 시도
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- PDF 뷰어 스크립트 -->
+    <script>
+    // PDF 뷰어 클래스
+    class PDFViewer {
+        constructor() {
+            this.pdfDoc = null;
+            this.currentPage = 1;
+            this.pageRendering = false;
+            this.pageNumPending = null;
+            this.scale = 1.0;
+            this.searchText = '';
+            this.searchResults = [];
+            this.currentSearchIndex = -1;
+            this.canvas = null;
+            this.ctx = null;
+            this.isDoingFallback = false; // 무한 루프 방지 플래그
+            this.isInitialSearch = false; // 초기 검색 플래그
+            this.attemptedSearches = new Set(); // 시도한 검색어 추적
+            
+            // URL 파라미터 파싱
+            this.params = new URLSearchParams(window.location.search);
+            this.fileName = this.params.get('file') || '';
+            this.initialSearch = this.params.get('search') || '';
+            this.fallbackSearches = this.params.get('fallback') ? this.params.get('fallback').split('|') : [];
+            this.allFiles = this.params.get('allfiles') ? this.params.get('allfiles').split('|') : [];
+            
+            this.init();
+        }
+        
+        async init() {
+            console.group('📄 PDF Viewer 초기화');
+            console.log('URL 파라미터:', {
+                file: this.fileName,
+                search: this.initialSearch,
+                fallback: this.fallbackSearches,
+                allfiles: this.allFiles
+            });
+            
+            // 이벤트 리스너 설정
+            this.setupEventListeners();
+            
+            // PDF 로드
+            if (this.fileName) {
+                await this.loadPDF(this.fileName);
+                
+                // 초기 검색 실행
+                if (this.initialSearch) {
+                    console.log('초기 검색 시작:', this.initialSearch);
+                    this.isInitialSearch = true; // 초기 검색 플래그 설정
+                    document.getElementById('searchInput').value = this.initialSearch;
+                    await this.performSearch();
+                    this.isInitialSearch = false; // 초기 검색 완료 후 플래그 해제
+                }
+            } else {
+                this.showError('PDF 파일이 지정되지 않았습니다.');
+            }
+            
+            console.groupEnd();
+        }
+        
+        setupEventListeners() {
+            // 사이드바 토글
+            document.getElementById('toggleSidebar').addEventListener('click', () => {
+                document.getElementById('sidebar').classList.toggle('hidden');
+            });
+            
+            // 페이지 네비게이션
+            document.getElementById('prevPage').addEventListener('click', () => this.previousPage());
+            document.getElementById('nextPage').addEventListener('click', () => this.nextPage());
+            document.getElementById('pageNum').addEventListener('change', (e) => {
+                const page = parseInt(e.target.value);
+                if (page >= 1 && page <= this.pdfDoc.numPages) {
+                    this.goToPage(page);
+                }
+            });
+            
+            // 줌 컨트롤
+            document.getElementById('zoomIn').addEventListener('click', () => this.zoomIn());
+            document.getElementById('zoomOut').addEventListener('click', () => this.zoomOut());
+            document.getElementById('zoomSelect').addEventListener('change', (e) => {
+                if (e.target.value === 'page-fit' || e.target.value === 'page-width') {
+                    this.fitPage(e.target.value);
+                } else {
+                    this.scale = parseFloat(e.target.value);
+                    this.renderPage(this.currentPage);
+                }
+            });
+            
+            // 검색
+            document.getElementById('searchInput').addEventListener('input', 
+                this.debounce(() => {
+                    // 사용자가 직접 입력하는 경우에만 검색 실행
+                    if (!this.isDoingFallback) {
+                        this.performSearch();
+                    }
+                }, 500)
+            );
+            document.getElementById('searchPrev').addEventListener('click', () => this.previousSearchResult());
+            document.getElementById('searchNext').addEventListener('click', () => this.nextSearchResult());
+            
+            // 다운로드 & 인쇄
+            document.getElementById('downloadPdf').addEventListener('click', () => this.downloadPDF());
+            document.getElementById('printPdf').addEventListener('click', () => this.printPDF());
+            
+            // 키보드 단축키
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey || e.metaKey) {
+                    switch(e.key) {
+                        case 'f':
+                            e.preventDefault();
+                            document.getElementById('searchInput').focus();
+                            break;
+                        case '+':
+                        case '=':
+                            e.preventDefault();
+                            this.zoomIn();
+                            break;
+                        case '-':
+                            e.preventDefault();
+                            this.zoomOut();
+                            break;
+                    }
+                }
+            });
+        }
+        
+        async loadPDF(fileName) {
+            try {
+                this.showLoading(true);
+                
+                const url = `./pdfs/${fileName}`;
+                console.log('PDF 로드 중:', url);
+                
+                // PDF 로드
+                const loadingTask = pdfjsLib.getDocument({
+                    url: url,
+                    cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
+                    cMapPacked: true
+                });
+                
+                // 로딩 진행률
+                loadingTask.onProgress = (progress) => {
+                    if (progress.total > 0) {
+                        const percent = (progress.loaded / progress.total) * 100;
+                        document.getElementById('loadingProgress').style.width = percent + '%';
+                    }
+                };
+                
+                this.pdfDoc = await loadingTask.promise;
+                
+                // 문서 정보 업데이트
+                document.getElementById('documentTitle').textContent = fileName;
+                document.getElementById('totalPages').textContent = `/ ${this.pdfDoc.numPages}`;
+                document.getElementById('pageNum').max = this.pdfDoc.numPages;
+                
+                // 첫 페이지 렌더링
+                await this.renderPage(1);
+                
+                // 썸네일 생성
+                this.generateThumbnails();
+                
+                this.showLoading(false);
+                
+            } catch (error) {
+                console.error('PDF 로드 실패:', error);
+                this.showError(`PDF 로드 실패: ${error.message}`);
+                
+                // 다른 파일 시도
+                if (this.allFiles.length > 1) {
+                    const currentIndex = this.allFiles.indexOf(fileName.replace('.pdf', ''));
+                    if (currentIndex < this.allFiles.length - 1) {
+                        const nextFile = this.allFiles[currentIndex + 1] + '.pdf';
+                        console.log('다음 파일 시도:', nextFile);
+                        await this.loadPDF(nextFile);
+                    }
+                }
+            }
+        }
+        
+        async renderPage(pageNumber) {
+            if (this.pageRendering) {
+                this.pageNumPending = pageNumber;
+                return;
+            }
+            
+            this.pageRendering = true;
+            this.currentPage = pageNumber;
+            
+            try {
+                const page = await this.pdfDoc.getPage(pageNumber);
+                const viewport = page.getViewport({ scale: this.scale });
+                
+                // 기존 페이지 제거
+                const pdfPages = document.getElementById('pdfPages');
+                pdfPages.innerHTML = '';
+                
+                // 새 캔버스 생성
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'pdf-page';
+                
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                pageDiv.appendChild(canvas);
+                pdfPages.appendChild(pageDiv);
+                
+                // 페이지 렌더링
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+                
+                await page.render(renderContext).promise;
+                
+                // 텍스트 레이어 추가 (검색용)
+                await this.renderTextLayer(page, viewport, pageDiv);
+                
+                // 페이지 번호 업데이트
+                document.getElementById('pageNum').value = pageNumber;
+                
+                // 썸네일 활성화
+                this.updateActiveThumbnail(pageNumber);
+                
+                // 검색 결과 하이라이트
+                if (this.searchText) {
+                    await this.highlightSearchResults(page, pageNumber);
+                }
+                
+            } catch (error) {
+                console.error('페이지 렌더링 실패:', error);
+            }
+            
+            this.pageRendering = false;
+            
+            if (this.pageNumPending !== null) {
+                const pending = this.pageNumPending;
+                this.pageNumPending = null;
+                this.renderPage(pending);
+            }
+        }
+        
+        async renderTextLayer(page, viewport, container) {
+            const textContent = await page.getTextContent();
+            const textLayer = document.createElement('div');
+            textLayer.className = 'textLayer';
+            
+            textContent.items.forEach(item => {
+                const span = document.createElement('span');
+                span.textContent = item.str;
+                span.style.position = 'absolute';
+                
+                // 텍스트 위치 계산
+                const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+                span.style.left = tx[4] + 'px';
+                span.style.top = tx[5] + 'px';
+                span.style.fontSize = Math.sqrt((tx[0] * tx[0]) + (tx[1] * tx[1])) + 'px';
+                
+                textLayer.appendChild(span);
+            });
+            
+            container.appendChild(textLayer);
+        }
+        
+        // 검색 결과 하이라이트 메서드 추가
+        async highlightSearchResults(page, pageNum) {
+            if (!this.searchResults || this.searchResults.length === 0) return;
+            
+            // 현재 페이지의 검색 결과만 필터링
+            const pageResults = this.searchResults.filter(result => result.page === pageNum);
+            if (pageResults.length === 0) return;
+            
+            const textContent = await page.getTextContent();
+            const textLayer = document.querySelector('.textLayer');
+            
+            if (!textLayer) return;
+            
+            // 텍스트 레이어의 모든 span 요소들을 가져옴
+            const spans = textLayer.querySelectorAll('span');
+            
+            // 각 span에서 검색어 찾아서 하이라이트
+            spans.forEach(span => {
+                const text = span.textContent;
+                if (text && text.toLowerCase().includes(this.searchText.toLowerCase())) {
+                    span.classList.add('search-highlight');
+                }
+            });
+            
+            console.log(`페이지 ${pageNum} 하이라이트 처리 완료`);
+        }
+        
+        async performSearch() {
+            const searchText = document.getElementById('searchInput').value.trim();
+            if (!searchText || !this.pdfDoc) return;
+            
+            // 이미 시도한 검색어인지 확인
+            if (this.attemptedSearches.has(searchText.toLowerCase())) {
+                console.log('이미 시도한 검색어:', searchText);
+                return;
+            }
+            
+            this.attemptedSearches.add(searchText.toLowerCase());
+            
+            console.group('🔍 PDF 내 검색 실행');
+            console.log('검색어:', searchText);
+            console.log('isDoingFallback:', this.isDoingFallback);
+            console.log('isInitialSearch:', this.isInitialSearch);
+            
+            // 검색 중 dimmed 처리
+            this.showSearching(true);
+            
+            this.searchText = searchText;
+            this.searchResults = [];
+            this.currentSearchIndex = -1;
+            
+            // 모든 페이지에서 검색
+            for (let i = 1; i <= this.pdfDoc.numPages; i++) {
+                const page = await this.pdfDoc.getPage(i);
+                const textContent = await page.getTextContent();
+                const text = textContent.items.map(item => item.str).join(' ');
+                
+                // 대소문자 구분 없이 검색
+                const regex = new RegExp(searchText, 'gi');
+                let match;
+                
+                while ((match = regex.exec(text)) !== null) {
+                    this.searchResults.push({
+                        page: i,
+                        text: match[0],
+                        index: match.index,
+                        context: this.getContext(text, match.index, searchText.length)
+                    });
+                }
+            }
+            
+            console.log(`검색 완료: ${this.searchResults.length}개 결과`);
+            
+            // 검색 결과 표시
+            this.displaySearchResults();
+            
+            // 첫 번째 결과로 이동
+            if (this.searchResults.length > 0) {
+                this.currentSearchIndex = 0;
+                await this.goToSearchResult(0);
+                this.showSearching(false);
+                
+                // 결과가 많으면 알림 표시
+                if (this.searchResults.length > 10) {
+                    const firstPage = this.searchResults[0].page;
+                    const totalResults = this.searchResults.length;
+                    console.log(`검색 완료: "${this.searchText}" - ${totalResults}개 결과 (첫 결과: ${firstPage}페이지)`);
+                }
+                
+                console.groupEnd();
+                return;
+            }
+            
+            // 검색 결과가 없는 경우
+            console.log('검색 결과 없음');
+            
+            // 초기 검색이거나 이미 fallback 중이면 더 이상 진행하지 않음
+            if (this.isInitialSearch || this.isDoingFallback) {
+                console.log('초기 검색 또는 이미 fallback 중 - 중단');
+                this.showSearching(false);
+                
+                // 초기 검색인 경우에만 스마트 검색 시도
+                if (this.isInitialSearch && !this.isDoingFallback) {
+                    const smartSearch = await this.trySmartSearch(searchText, []);
+                    if (!smartSearch) {
+                        alert('검색 결과가 없습니다.');
+                    }
+                }
+                
+                console.groupEnd();
+                return;
+            }
+            
+            // Fallback 검색 시도
+            if (this.fallbackSearches && this.fallbackSearches.length > 0) {
+                console.log('Fallback 검색 시작');
+                console.log('Fallback 목록:', this.fallbackSearches);
+                
+                this.isDoingFallback = true;
+                
+                // 현재 검색어와 다른 fallback만 시도
+                const fallbacksToTry = this.fallbackSearches.filter(fb => {
+                    if (!fb) return false;
+                    const normalizedFb = fb.trim().toLowerCase();
+                    const normalizedSearch = searchText.trim().toLowerCase();
+                    return normalizedFb !== normalizedSearch && !this.attemptedSearches.has(normalizedFb);
+                });
+                
+                console.log('시도할 fallback:', fallbacksToTry);
+                
+                if (fallbacksToTry.length === 0) {
+                    console.log('시도할 fallback 없음');
+                    this.isDoingFallback = false;
+                    this.showSearching(false);
+                    
+                    const smartSearch = await this.trySmartSearch(searchText, this.fallbackSearches);
+                    if (!smartSearch) {
+                        alert('검색 결과가 없습니다.');
+                    }
+                    
+                    console.groupEnd();
+                    return;
+                }
+                
+                // Fallback 검색 실행
+                for (const fallback of fallbacksToTry) {
+                    console.log(`Fallback 시도: "${fallback}"`);
+                    
+                    // 이미 시도한 것으로 표시
+                    this.attemptedSearches.add(fallback.toLowerCase());
+                    
+                    // 입력란 업데이트
+                    document.getElementById('searchInput').value = fallback;
+                    
+                    // 직접 검색 수행 (재귀 호출 방지)
+                    this.searchText = fallback;
+                    this.searchResults = [];
+                    
+                    for (let i = 1; i <= this.pdfDoc.numPages; i++) {
+                        const page = await this.pdfDoc.getPage(i);
+                        const textContent = await page.getTextContent();
+                        const text = textContent.items.map(item => item.str).join(' ');
+                        
+                        const regex = new RegExp(fallback, 'gi');
+                        let match;
+                        
+                        while ((match = regex.exec(text)) !== null) {
+                            this.searchResults.push({
+                                page: i,
+                                text: match[0],
+                                index: match.index,
+                                context: this.getContext(text, match.index, fallback.length)
+                            });
+                        }
+                    }
+                    
+                    if (this.searchResults.length > 0) {
+                        console.log(`Fallback 성공: "${fallback}"로 ${this.searchResults.length}개 결과 찾음`);
+                        
+                        this.displaySearchResults();
+                        this.currentSearchIndex = 0;
+                        await this.goToSearchResult(0);
+                        this.isDoingFallback = false;
+                        this.showSearching(false);
+                        
+                        // 결과가 많으면 알림 표시
+                        if (this.searchResults.length > 10) {
+                            const firstPage = this.searchResults[0].page;
+                            alert(`"${fallback}" 검색 결과: ${this.searchResults.length}개\n첫 번째 결과는 ${firstPage}페이지에 있습니다.`);
+                        }
+                        
+                        console.groupEnd();
+                        return;
+                    }
+                }
+                
+                this.isDoingFallback = false;
+            }
+            
+            // 모든 시도 실패
+            this.showSearching(false);
+            
+            const smartSearch = await this.trySmartSearch(searchText, this.fallbackSearches || []);
+            if (!smartSearch) {
+                const tried = Array.from(this.attemptedSearches);
+                alert('검색 결과가 없습니다.\n\n시도한 검색어:\n' + tried.join('\n'));
+            }
+            
+            console.groupEnd();
+        }
+        
+        // 스마트 검색 메서드 추가 (더미 구현)
+        async trySmartSearch(searchText, fallbacks) {
+            // 추후 구현 예정
+            return false;
+        }
+        
+        getContext(text, index, length) {
+            const contextLength = 30;
+            const start = Math.max(0, index - contextLength);
+            const end = Math.min(text.length, index + length + contextLength);
+            
+            let context = text.substring(start, end);
+            if (start > 0) context = '...' + context;
+            if (end < text.length) context = context + '...';
+            
+            return context;
+        }
+        
+        displaySearchResults() {
+            const container = document.getElementById('searchResults');
+            const count = document.getElementById('searchCount');
+            
+            count.textContent = this.searchResults.length;
+            
+            if (this.searchResults.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-muted p-3">
+                        검색 결과가 없습니다
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = this.searchResults.map((result, index) => `
+                <div class="search-result-item ${index === this.currentSearchIndex ? 'active' : ''}" 
+                     onclick="pdfViewer.goToSearchResult(${index})">
+                    <div class="result-page">페이지 ${result.page}</div>
+                    <div class="result-text">${this.highlightText(result.context, this.searchText)}</div>
+                </div>
+            `).join('');
+        }
+        
+        highlightText(text, searchText) {
+            const regex = new RegExp(`(${searchText})`, 'gi');
+            return text.replace(regex, '<span class="highlight">$1</span>');
+        }
+        
+        async goToSearchResult(index) {
+            if (index < 0 || index >= this.searchResults.length) return;
+            
+            this.currentSearchIndex = index;
+            const result = this.searchResults[index];
+            
+            console.log(`검색 결과로 이동: 페이지 ${result.page}`);
+            
+            // 해당 페이지로 이동
+            await this.goToPage(result.page);
+            
+            // 검색 결과 업데이트
+            this.displaySearchResults();
+        }
+        
+        previousSearchResult() {
+            if (this.searchResults.length === 0) return;
+            this.currentSearchIndex = (this.currentSearchIndex - 1 + this.searchResults.length) % this.searchResults.length;
+            this.goToSearchResult(this.currentSearchIndex);
+        }
+        
+        nextSearchResult() {
+            if (this.searchResults.length === 0) return;
+            this.currentSearchIndex = (this.currentSearchIndex + 1) % this.searchResults.length;
+            this.goToSearchResult(this.currentSearchIndex);
+        }
+        
+        async generateThumbnails() {
+            const container = document.getElementById('thumbnails');
+            container.innerHTML = '';
+            
+            for (let i = 1; i <= Math.min(this.pdfDoc.numPages, 20); i++) {
+                const page = await this.pdfDoc.getPage(i);
+                const viewport = page.getViewport({ scale: 0.3 });
+                
+                const thumbnailDiv = document.createElement('div');
+                thumbnailDiv.className = 'thumbnail-item';
+                thumbnailDiv.onclick = () => this.goToPage(i);
+                
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.className = 'thumbnail-canvas';
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                await page.render({
+                    canvasContext: ctx,
+                    viewport: viewport
+                }).promise;
+                
+                const label = document.createElement('div');
+                label.className = 'thumbnail-label';
+                label.textContent = `페이지 ${i}`;
+                
+                thumbnailDiv.appendChild(canvas);
+                thumbnailDiv.appendChild(label);
+                container.appendChild(thumbnailDiv);
+            }
+        }
+        
+        updateActiveThumbnail(pageNumber) {
+            document.querySelectorAll('.thumbnail-item').forEach((item, index) => {
+                if (index + 1 === pageNumber) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+        }
+        
+        goToPage(pageNumber) {
+            if (pageNumber >= 1 && pageNumber <= this.pdfDoc.numPages) {
+                this.renderPage(pageNumber);
+            }
+        }
+        
+        previousPage() {
+            if (this.currentPage <= 1) return;
+            this.goToPage(this.currentPage - 1);
+        }
+        
+        nextPage() {
+            if (this.currentPage >= this.pdfDoc.numPages) return;
+            this.goToPage(this.currentPage + 1);
+        }
+        
+        zoomIn() {
+            this.scale = Math.min(this.scale * 1.2, 3);
+            document.getElementById('zoomSelect').value = this.scale;
+            this.renderPage(this.currentPage);
+        }
+        
+        zoomOut() {
+            this.scale = Math.max(this.scale / 1.2, 0.3);
+            document.getElementById('zoomSelect').value = this.scale;
+            this.renderPage(this.currentPage);
+        }
+        
+        fitPage(type) {
+            // 구현 예정
+            console.log('Fit page:', type);
+        }
+        
+        downloadPDF() {
+            const link = document.createElement('a');
+            link.href = `./pdfs/${this.fileName}`;
+            link.download = this.fileName;
+            link.click();
+        }
+        
+        printPDF() {
+            window.print();
+        }
+        
+        showLoading(show) {
+            document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
+        }
+        
+        showError(message) {
+            this.showLoading(false);
+            document.getElementById('errorMessage').style.display = 'block';
+            document.getElementById('errorText').textContent = message;
+        }
+        
+        showSearching(show) {
+            if (show) {
+                // 검색 중 dimmed 오버레이 표시
+                let overlay = document.getElementById('searchingOverlay');
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = 'searchingOverlay';
+                    overlay.className = 'loading-overlay';
+                    overlay.innerHTML = `
+                        <div class="loading-spinner"></div>
+                        <div class="loading-text">빌딩을 검색하는 중...</div>
+                    `;
+                    document.getElementById('pdfViewer').appendChild(overlay);
+                }
+                overlay.style.display = 'flex';
+            } else {
+                const overlay = document.getElementById('searchingOverlay');
+                if (overlay) {
+                    overlay.style.display = 'none';
+                }
+            }
+        }
+        
+        debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+    }
+    
+    // PDF 뷰어 초기화
+    let pdfViewer;
+    document.addEventListener('DOMContentLoaded', () => {
+        pdfViewer = new PDFViewer();
+    });
+    </script>
+</body>
+</html>
