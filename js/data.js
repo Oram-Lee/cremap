@@ -222,23 +222,37 @@ const DataManager = {
             ...item,
             _dataType: dataType
         }));
-            
-            // 빌딩명 검색
-            if (criteria.buildingName && criteria.buildingName.trim()) {
-                const searchTerm = criteria.buildingName.toLowerCase().trim();
-                results = results.filter(item => 
-                    item['빌딩명'] && item['빌딩명'].toLowerCase().includes(searchTerm)
-                );
-                console.log(`빌딩명 '${criteria.buildingName}' 검색 결과: ${results.length}개`);
-            }
-            
-            // 지역명 검색
-            if (criteria.district && criteria.district.trim()) {
-                const searchTerm = criteria.district.toLowerCase().trim();
-                results = results.filter(item => 
-                    item['주소'] && item['주소'].toLowerCase().includes(searchTerm)
-                );
-            }
+    // 배열에서 실제 검색 수행
+    searchInArray(searchArray, criteria, dataType) {
+        if (!searchArray || searchArray.length === 0) {
+            console.log(`⚠️ ${dataType} 데이터가 비어있습니다.`);
+            return [];
+        }
+        
+        let results = [...searchArray];
+        
+        // 데이터 타입 추가 (vacancy 또는 building)
+        results = results.map(item => ({
+            ...item,
+            _dataType: dataType
+        }));
+        
+        // 빌딩명 검색
+        if (criteria.buildingName && criteria.buildingName.trim()) {
+            const searchTerm = criteria.buildingName.toLowerCase().trim();
+            results = results.filter(item => 
+                item['빌딩명'] && item['빌딩명'].toLowerCase().includes(searchTerm)
+            );
+            console.log(`빌딩명 '${criteria.buildingName}' 검색 결과 - ${dataType}: ${results.length}개`);
+        }
+        
+        // 지역명 검색
+        if (criteria.district && criteria.district.trim()) {
+            const searchTerm = criteria.district.toLowerCase().trim();
+            results = results.filter(item => 
+                item['주소'] && item['주소'].toLowerCase().includes(searchTerm)
+            );
+        }
             
             // 역명 검색 - 개선된 버전
             if (criteria.station && criteria.station.trim()) {
