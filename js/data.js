@@ -1,258 +1,194 @@
-// 전역 데이터 저장소 - 작동하는 완전한 버전
-const DataManager = {
-    cache: null,
-    excelData: null,
-    selectedBuildings: new Set(),
-    currentResults: [],
-    isInitialized: false,
+// data.js - 개선된 데이터 관리 모듈
+const DataManager = (() => {
+    let instance = null;
     
-    // Google Drive 파일 ID (업데이트 필요!)
-    SPREADSHEET_ID: 'YOUR_GOOGLE_DRIVE_FILE_ID', // 여기에 실제 파일 ID 입력
-    
-    // 캐시 데이터 로드
-    async loadCache() {
-        try {
+    class DataManagerClass {
+        constructor() {
+            if (instance) {
+                return instance;
+            }
+            
+            this.excelData = { vacancies: [], buildings: [] };
+            this.cacheData = {};
+            this.currentResults = [];
+            this.isInitialized = false;
+            
+            instance = this;
+        }
+        
+        // 캐시 데이터 로드
+        async loadCacheData() {
             console.log('📁 캐시 데이터 로드 시도...');
-            const response = await fetch('data/cache_data.json');
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            this.cache = await response.json();
-            
-            // 마지막 업데이트 시간 표시
-            const lastUpdatedElement = document.getElementById('lastUpdated');
-            if (lastUpdatedElement) {
-                lastUpdatedElement.textContent = 
-                    `마지막 업데이트: ${this.cache.last_updated || '알 수 없음'}`;
-            }
-            
-            console.log('✅ 캐시 데이터 로드 완료:', {
-                buildings: this.cache.buildings?.length || 0,
-                districts: this.cache.districts?.length || 0,
-                stations: this.cache.stations?.length || 0
-            });
-            
-            return true;
-        } catch (error) {
-            console.warn('⚠️ 캐시 로드 실패, 기본 데이터 사용:', error.message);
-            
-            // 기본 데이터로 대체
-            this.cache = {
-                buildings: ['강남빌딩', '서초빌딩', '역삼빌딩', '논현빌딩', '삼성빌딩'],
-                districts: ['강남구', '서초구', '송파구', '영등포구', '마포구'],
-                dongs: ['역삼동', '논현동', '삼성동', '청담동', '압구정동'],
-                stations: ['강남역', '역삼역', '선릉역', '삼성역', '종각역'],
-                last_updated: new Date().toISOString()
-            };
-            
-            const lastUpdatedElement = document.getElementById('lastUpdated');
-            if (lastUpdatedElement) {
-                lastUpdatedElement.textContent = '기본 데이터 사용중';
-            }
-            
-            return false;
-        }
-    },
-    
-    // Excel 데이터 로드 (JSON 파일에서)
-    async loadExcelData() {
-        try {
-            console.log('📊 Excel 데이터 로드 시도...');
-            
-            // 로컬 JSON 파일에서 직접 로드
-            const response = await fetch('data/excel_data.json');
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            this.excelData = await response.json();
-            
-            console.log('✅ Excel 데이터 로드 완료:', {
-                buildings: this.excelData.buildings ? this.excelData.buildings.length : 0,
-                vacancies: this.excelData.vacancies ? this.excelData.vacancies.length : 0
-            });
-            
-            // 데이터 확인 및 보정
-            if (!this.excelData.vacancies || this.excelData.vacancies.length === 0) {
-                console.warn('⚠️ 공실 데이터가 없습니다!');
-                
-                // buildings 배열에서 공실 정보 확인
-                if (this.excelData.buildings && this.excelData.buildings.length > 0) {
-                    const vacanciesInBuildings = this.excelData.buildings.filter(b => 
-                        b['공실층'] || b['공실전용면적(평)'] || b['임대료'] || b['보증금']
-                    );
-                    
-                    if (vacanciesInBuildings.length > 0) {
-                        console.log(`📋 buildings 배열에서 ${vacanciesInBuildings.length}개의 공실 정보 발견`);
-                        // buildings 배열의 공실 정보를 vacancies로 복사
-                        this.excelData.vacancies = vacanciesInBuildings;
-                    } else {
-                        console.log('📋 buildings에 공실 정보가 없음, 전체를 사용');
-                        this.excelData.vacancies = this.excelData.buildings;
-                    }
+            try {
+                const response = await fetch('./assets/data/cache_20241213.json');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
+                const data = await response.json();
+                this.cacheData = data;
+                console.log('✅ 캐시 데이터 로드 완료:', data);
+                return data;
+            } catch (error) {
+                console.error('❌ 캐시 데이터 로드 실패:', error);
+                return null;
             }
-            
-            return true;
-        } catch (error) {
-            console.error('❌ Excel 데이터 로드 실패:', error);
-            
-            // 샘플 데이터로 대체
-            this.excelData = {
-                buildings: this.generateSampleBuildingData(),
-                vacancies: this.generateSampleVacancyData()
-            };
-            
-            console.log('📝 샘플 데이터 사용');
-            return false;
-        }
-    },
-    
-    // 샘플 빌딩 데이터 생성
-    generateSampleBuildingData() {
-        return [
-            {
-                '빌딩명': '강남파이낸스센터',
-                '주소': '서울시 강남구 테헤란로 152',
-                '기준층전용면적': '500',
-                '빌딩규모': 'B6/38F',
-                '연면적': '82,742',
-                '출처회사': 'CBRE'
-            },
-            {
-                '빌딩명': '역삼IT타워',
-                '주소': '서울시 강남구 역삼동 123-45',
-                '기준층전용면적': '300',
-                '빌딩규모': 'B4/25F',
-                '연면적': '45,320',
-                '출처회사': 'ACT'
-            },
-            {
-                '빌딩명': '선릉비즈센터',
-                '주소': '서울시 강남구 선릉로 100',
-                '기준층전용면적': '400',
-                '빌딩규모': 'B5/30F',
-                '연면적': '65,480',
-                '출처회사': 'KTG'
-            }
-        ];
-    },
-    
-    // 샘플 공실 데이터 생성
-    generateSampleVacancyData() {
-        return [
-            {
-                '빌딩명': '강남파이낸스센터',
-                '주소': '서울시 강남구 테헤란로 152',
-                '인근역': '- 2호선 강남역 도보 3분',
-                '공실층': '15F',
-                '공실전용면적(평)': '150',
-                '임대료': '85,000',
-                '보증금': '10,000,000',
-                '출처회사': 'CBRE'
-            },
-            {
-                '빌딩명': '역삼IT타워',
-                '주소': '서울시 강남구 역삼동 123-45',
-                '인근역': '- 2호선 역삼역 도보 5분',
-                '공실층': '8F',
-                '공실전용면적(평)': '80',
-                '임대료': '75,000',
-                '보증금': '8,000,000',
-                '출처회사': 'ACT'
-            },
-            {
-                '빌딩명': '광화문D타워',
-                '주소': '서울시 종로구 세종대로 21',
-                '인근역': '- 5호선 광화문역 도보 1분',
-                '공실층': '18F',
-                '공실전용면적(평)': '250',
-                '임대료': '95,000',
-                '보증금': '15,000,000',
-                '출처회사': 'CBRE'
-            },
-            {
-                '빌딩명': '광화문센터빌딩',
-                '주소': '서울시 종로구 종로1길 50',
-                '인근역': '- 5호선 광화문역 도보 3분',
-                '공실층': '12F',
-                '공실전용면적(평)': '180',
-                '임대료': '88,000',
-                '보증금': '12,000,000',
-                '출처회사': 'JLL'
-            },
-            {
-                '빌딩명': '세종로타워',
-                '주소': '서울시 종로구 세종대로 175',
-                '인근역': '- 5호선 광화문역 도보 5분',
-                '공실층': '25F',
-                '공실전용면적(평)': '300',
-                '임대료': '100,000',
-                '보증금': '18,000,000',
-                '출처회사': 'KTG'
-            }
-        ];
-    },
-    
-    // 검색 실행
-    search(criteria) {
-        if (!this.isInitialized) {
-            console.warn('⚠️ DataManager가 초기화되지 않았습니다.');
-            alert('데이터가 아직 로드되지 않았습니다.');
-            return [];
         }
         
-        this.showLoading(true);
+        // Excel 데이터 로드
+        async loadExcelData() {
+            console.log('📊 Excel 데이터 로드 시도...');
+            try {
+                const response = await fetch('./assets/data/excel_data.json');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                // 데이터가 배열인지 확인
+                if (data.vacancies && Array.isArray(data.vacancies)) {
+                    this.excelData.vacancies = data.vacancies;
+                }
+                if (data.buildings && Array.isArray(data.buildings)) {
+                    this.excelData.buildings = data.buildings;
+                }
+                
+                console.log('✅ Excel 데이터 로드 완료:', data);
+                return data;
+            } catch (error) {
+                console.error('❌ Excel 데이터 로드 실패:', error);
+                console.log('📝 샘플 데이터 사용');
+                this.excelData.vacancies = this.generateSampleVacancyData();
+                return this.excelData;
+            }
+        }
         
-        try {
-            // vacancies가 없거나 비어있으면 buildings에서 검색
-            let searchArray = this.excelData.vacancies && this.excelData.vacancies.length > 0 
-                ? this.excelData.vacancies 
-                : this.excelData.buildings;
+        // 샘플 공실 데이터 생성
+        generateSampleVacancyData() {
+            return [
+                {
+                    '빌딩명': '강남파이낸스센터',
+                    '주소': '서울시 강남구 테헤란로 152',
+                    '인근역': '- 2호선 강남역 도보 3분',
+                    '공실층': '15F',
+                    '공실전용면적(평)': '150',
+                    '임대료': '85,000',
+                    '보증금': '10,000,000',
+                    '출처회사': 'CBRE'
+                },
+                {
+                    '빌딩명': '역삼IT타워',
+                    '주소': '서울시 강남구 역삼동 123-45',
+                    '인근역': '- 2호선 역삼역 도보 5분',
+                    '공실층': '8F',
+                    '공실전용면적(평)': '80',
+                    '임대료': '75,000',
+                    '보증금': '8,000,000',
+                    '출처회사': 'ACT'
+                },
+                {
+                    '빌딩명': '광화문D타워',
+                    '주소': '서울시 종로구 세종대로 21',
+                    '인근역': '- 5호선 광화문역 도보 1분',
+                    '공실층': '18F',
+                    '공실전용면적(평)': '250',
+                    '임대료': '95,000',
+                    '보증금': '15,000,000',
+                    '출처회사': 'CBRE'
+                },
+                {
+                    '빌딩명': '광화문센터빌딩',
+                    '주소': '서울시 종로구 종로1길 50',
+                    '인근역': '- 5호선 광화문역 도보 3분',
+                    '공실층': '12F',
+                    '공실전용면적(평)': '180',
+                    '임대료': '88,000',
+                    '보증금': '12,000,000',
+                    '출처회사': 'JLL'
+                },
+                {
+                    '빌딩명': '세종로타워',
+                    '주소': '서울시 종로구 세종대로 175',
+                    '인근역': '- 5호선 광화문역 도보 5분',
+                    '공실층': '25F',
+                    '공실전용면적(평)': '300',
+                    '임대료': '100,000',
+                    '보증금': '18,000,000',
+                    '출처회사': 'KTG'
+                }
+            ];
+        }
+        
+        // 검색 실행
+        search(criteria) {
+            if (!this.isInitialized) {
+                console.warn('⚠️ DataManager가 초기화되지 않았습니다.');
+                alert('데이터가 아직 로드되지 않았습니다.');
+                return [];
+            }
             
-            console.log(`🔍 검색 대상: ${searchArray === this.excelData.vacancies ? 'vacancies' : 'buildings'} (${searchArray.length}개)`);
+            this.showLoading(true);
+            
+            try {
+                let allResults = [];
+                
+                // vacancies 검색
+                if (this.excelData.vacancies && this.excelData.vacancies.length > 0) {
+                    console.log(`📋 vacancies 검색 (${this.excelData.vacancies.length}개)`);
+                    const vacancyResults = this.searchInArray(this.excelData.vacancies, criteria, 'vacancy');
+                    allResults = allResults.concat(vacancyResults);
+                }
+                
+                // buildings 검색
+                if (this.excelData.buildings && this.excelData.buildings.length > 0) {
+                    console.log(`🏢 buildings 검색 (${this.excelData.buildings.length}개)`);
+                    const buildingResults = this.searchInArray(this.excelData.buildings, criteria, 'building');
+                    allResults = allResults.concat(buildingResults);
+                }
+                
+                this.currentResults = allResults;
+                console.log(`📊 통합 검색 결과: 총 ${allResults.length}개 (vacancies + buildings)`);
+                
+                return allResults;
+            } catch (error) {
+                console.error('❌ 검색 실행 중 오류:', error);
+                alert('검색 중 오류가 발생했습니다.');
+                return [];
+            } finally {
+                this.showLoading(false);
+            }
+        }
+        
+        // 배열에서 실제 검색 수행
+        searchInArray(searchArray, criteria, dataType) {
+            if (!searchArray || searchArray.length === 0) {
+                console.log(`⚠️ ${dataType} 데이터가 비어있습니다.`);
+                return [];
+            }
             
             let results = [...searchArray];
-        
-        // 데이터 타입 추가 (vacancy 또는 building)
-        results = results.map(item => ({
-            ...item,
-            _dataType: dataType
-        }));
-    // 배열에서 실제 검색 수행
-    searchInArray(searchArray, criteria, dataType) {
-        if (!searchArray || searchArray.length === 0) {
-            console.log(`⚠️ ${dataType} 데이터가 비어있습니다.`);
-            return [];
-        }
-        
-        let results = [...searchArray];
-        
-        // 데이터 타입 추가 (vacancy 또는 building)
-        results = results.map(item => ({
-            ...item,
-            _dataType: dataType
-        }));
-        
-        // 빌딩명 검색
-        if (criteria.buildingName && criteria.buildingName.trim()) {
-            const searchTerm = criteria.buildingName.toLowerCase().trim();
-            results = results.filter(item => 
-                item['빌딩명'] && item['빌딩명'].toLowerCase().includes(searchTerm)
-            );
-            console.log(`빌딩명 '${criteria.buildingName}' 검색 결과 - ${dataType}: ${results.length}개`);
-        }
-        
-        // 지역명 검색
-        if (criteria.district && criteria.district.trim()) {
-            const searchTerm = criteria.district.toLowerCase().trim();
-            results = results.filter(item => 
-                item['주소'] && item['주소'].toLowerCase().includes(searchTerm)
-            );
-        }
+            
+            // 데이터 타입 추가 (vacancy 또는 building)
+            results = results.map(item => ({
+                ...item,
+                _dataType: dataType
+            }));
+            
+            // 빌딩명 검색
+            if (criteria.buildingName && criteria.buildingName.trim()) {
+                const searchTerm = criteria.buildingName.toLowerCase().trim();
+                results = results.filter(item => 
+                    item['빌딩명'] && item['빌딩명'].toLowerCase().includes(searchTerm)
+                );
+                console.log(`빌딩명 '${criteria.buildingName}' 검색 결과 - ${dataType}: ${results.length}개`);
+            }
+            
+            // 지역명 검색
+            if (criteria.district && criteria.district.trim()) {
+                const searchTerm = criteria.district.toLowerCase().trim();
+                results = results.filter(item => 
+                    item['주소'] && item['주소'].toLowerCase().includes(searchTerm)
+                );
+            }
             
             // 역명 검색 - 개선된 버전
             if (criteria.station && criteria.station.trim()) {
@@ -267,7 +203,6 @@ const DataManager = {
                 const sampleStations = results.slice(0, 5).map(item => item['인근역']).filter(Boolean);
                 console.log('샘플 인근역 데이터:', sampleStations);
                 
-                // 실제 데이터 구조 확인
                 if (results.length > 0) {
                     console.log(`${dataType}의 첫 번째 데이터 항목:`, JSON.stringify(results[0], null, 2));
                     console.log('데이터 키 목록:', Object.keys(results[0]));
@@ -300,6 +235,18 @@ const DataManager = {
                         console.log(`✅ 광화문 매칭 발견: "${item['인근역']}" (빌딩: ${item['빌딩명']})`);
                     }
                     
+                    // 강남 vs 광화문 비교 디버깅
+                    if (normalizedSearch === '광화문' || normalizedSearch === '강남') {
+                        if (nearbyStation.includes(normalizedSearch)) {
+                            console.log(`🔍 ${normalizedSearch} 데이터 발견:`, {
+                                빌딩명: item['빌딩명'],
+                                인근역: item['인근역'],
+                                인근역길이: item['인근역'].length,
+                                인근역타입: typeof item['인근역']
+                            });
+                        }
+                    }
+                    
                     if (!isMatched) return false;
                     
                     // 도보시간 필터링 - 복수 역 정보 처리
@@ -328,7 +275,7 @@ const DataManager = {
                     return true;
                 });
                 
-                console.log(`역명 '${criteria.station}' 검색 결과: ${results.length}개`);
+                console.log(`${normalizedSearch} 검색 결과 - ${dataType}: ${results.length}개`);
                 
                 // 검색 결과가 0개일 때 추가 분석
                 if (results.length === 0) {
@@ -348,6 +295,12 @@ const DataManager = {
                             인근역: item['인근역']
                         })));
                     }
+                    
+                    // JSON 구조 확인
+                    console.log('\n📂 JSON 데이터 구조 확인:');
+                    console.log('전체 키:', Object.keys(this.excelData));
+                    console.log(`vacancies 타입: ${Array.isArray(this.excelData.vacancies) ? 'Array' : typeof this.excelData.vacancies}`);
+                    console.log(`buildings 타입: ${Array.isArray(this.excelData.buildings) ? 'Array' : typeof this.excelData.buildings}`);
                     
                     // 다른 주요 역들 확인
                     const majorStations = ['강남', '역삼', '삼성', '종로', '시청', '을지로'];
@@ -414,145 +367,105 @@ const DataManager = {
                 });
             }
             
-            this.currentResults = results;
             console.log(`🔍 ${dataType} 최종 검색 결과: ${results.length}개`);
             
             return results;
-        } catch (error) {
-            console.error('❌ 검색 실행 중 오류:', error);
-            this.currentResults = [];
-            return [];
-        } finally {
-            this.showLoading(false);
         }
-    },
-    
-    // 로딩 표시
-    showLoading(show) {
-        const overlay = document.getElementById('loadingOverlay');
-        if (overlay) {
-            if (show) {
-                overlay.classList.remove('d-none');
-            } else {
-                overlay.classList.add('d-none');
+        
+        // 지도 검색
+        searchMap(criteria) {
+            console.log('🗺️ 지도 검색 시작:', criteria);
+            // 캐시 데이터(buildings) 사용
+            let results = this.cacheData.buildings || [];
+            
+            // 빌딩명 필터링
+            if (criteria.buildingName) {
+                results = results.filter(building => 
+                    building.building_name.toLowerCase().includes(criteria.buildingName.toLowerCase())
+                );
+            }
+            
+            // 지역명 필터링
+            if (criteria.district) {
+                results = results.filter(building => 
+                    building.address.toLowerCase().includes(criteria.district.toLowerCase())
+                );
+            }
+            
+            console.log(`🗺️ 지도 검색 결과: ${results.length}개`);
+            return results;
+        }
+        
+        // PDF 검색
+        searchPDF(keyword) {
+            console.log('📄 PDF 검색:', keyword);
+            // PDF 검색은 pdf-search-manager.js에서 처리
+            if (window.PDFSearchManager) {
+                return window.PDFSearchManager.search(keyword);
+            }
+            return [];
+        }
+        
+        // 로딩 표시
+        showLoading(show) {
+            const loadingDiv = document.getElementById('loading');
+            if (loadingDiv) {
+                loadingDiv.style.display = show ? 'block' : 'none';
             }
         }
-    },
-    
-    // 선택된 빌딩 추가/제거
-    toggleBuildingSelection(buildingData) {
-        if (!buildingData || !buildingData.빌딩명) return;
         
-        const key = `${buildingData.빌딩명}_${buildingData.주소 || ''}`;
-        
-        if (this.selectedBuildings.has(key)) {
-            this.selectedBuildings.delete(key);
-        } else {
-            this.selectedBuildings.add(key);
-        }
-        
-        this.updateSelectedBuildingsDisplay();
-    },
-    
-    // 선택된 빌딩 표시 업데이트
-    updateSelectedBuildingsDisplay() {
-        const section = document.getElementById('selectedBuildingsSection');
-        const list = document.getElementById('selectedBuildingsList');
-        const count = document.getElementById('selectedCount');
-        
-        if (!section || !list || !count) return;
-        
-        count.textContent = this.selectedBuildings.size;
-        
-        if (this.selectedBuildings.size > 0) {
-            section.classList.remove('d-none');
-            
-            list.innerHTML = Array.from(this.selectedBuildings).map(key => {
-                const [name, address] = key.split('_');
-                return `
-                    <span class="selected-building-tag">
-                        ${name}
-                        <button onclick="DataManager.removeSelectedBuilding('${key.replace(/'/g, "\\'")}')">&times;</button>
-                    </span>
-                `;
-            }).join('');
-        } else {
-            section.classList.add('d-none');
-        }
-    },
-    
-    // 선택된 빌딩 제거
-    removeSelectedBuilding(key) {
-        this.selectedBuildings.delete(key);
-        this.updateSelectedBuildingsDisplay();
-        
-        // 체크박스 업데이트
-        const checkbox = document.querySelector(`input[data-building-key="${key}"]`);
-        if (checkbox) {
-            checkbox.checked = false;
-            const row = checkbox.closest('tr');
-            if (row) row.classList.remove('table-warning');
-        }
-    },
-    
-    // 초기화
-    async init() {
-        try {
+        // 초기화
+        async initialize() {
             console.log('🚀 DataManager 초기화 시작...');
             
-            // 캐시 데이터 로드
-            const cacheLoaded = await this.loadCache();
-            if (!cacheLoaded) {
-                console.warn('⚠️ 캐시 로드 실패, 계속 진행');
+            try {
+                const [cacheResult, excelResult] = await Promise.all([
+                    this.loadCacheData(),
+                    this.loadExcelData()
+                ]);
+                
+                const status = {
+                    cache: cacheResult ? '성공' : '실패',
+                    excel: excelResult ? '성공' : '실패',
+                    vacancies: this.excelData.vacancies?.length || 0,
+                    buildings: this.excelData.buildings?.length || 0
+                };
+                
+                this.isInitialized = true;
+                console.log('✅ DataManager 초기화 완료:', status);
+                
+                return status;
+            } catch (error) {
+                console.error('❌ DataManager 초기화 실패:', error);
+                this.isInitialized = false;
+                throw error;
             }
-            
-            // Excel 데이터 로드
-            const excelLoaded = await this.loadExcelData();
-            if (!excelLoaded) {
-                console.warn('⚠️ Excel 데이터 로드 실패, 샘플 데이터 사용');
-            }
-            
-            this.isInitialized = true;
-            
-            console.log('✅ DataManager 초기화 완료:', {
-                cache: cacheLoaded ? '성공' : '기본값 사용',
-                excel: excelLoaded ? '성공' : '샘플 데이터 사용',
-                buildings: this.excelData?.buildings?.length || 0,
-                vacancies: this.excelData?.vacancies?.length || 0
-            });
-            
-            return true;
-        } catch (error) {
-            console.error('❌ DataManager 초기화 실패:', error);
-            this.isInitialized = false;
-            return false;
         }
     }
-};
-
-// 전역 함수로 노출
-window.DataManager = DataManager;
-
-// 페이지 로드시 초기화 - DOM 준비 후 안전하게 실행
-document.addEventListener('DOMContentLoaded', async () => {
-    try {
-        console.log('📄 DOM 로드 완료, DataManager 초기화...');
-        const success = await DataManager.init();
-        
-        if (success) {
-            console.log('✅ 시스템 준비 완료!');
-        }
-        
-        // 다른 매니저들이 DataManager 초기화를 기다릴 수 있도록 이벤트 발생
-        window.dispatchEvent(new CustomEvent('dataManagerReady', {
-            detail: { 
-                success: DataManager.isInitialized,
-                cache: DataManager.cache,
-                excelData: DataManager.excelData 
+    
+    // 싱글톤 인스턴스 반환
+    return {
+        getInstance: () => {
+            if (!instance) {
+                instance = new DataManagerClass();
             }
-        }));
-        
+            return instance;
+        }
+    };
+})();
+
+// 전역 객체로 노출
+window.DataManager = DataManager.getInstance();
+
+// DOM 로드 완료 시 초기화
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('📄 DOM 로드 완료, DataManager 초기화...');
+    
+    try {
+        await window.DataManager.initialize();
+        console.log('✅ 시스템 준비 완료!');
     } catch (error) {
-        console.error('❌ 초기화 중 치명적 오류:', error);
+        console.error('❌ 시스템 초기화 실패:', error);
+        alert('데이터 로드에 실패했습니다. 페이지를 새로고침해주세요.');
     }
 });
