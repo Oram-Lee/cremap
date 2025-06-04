@@ -240,78 +240,87 @@ const DataManager = {
                 );
             }
             
-            // 역명 검색 - 개선된 버전
+            // 역명 검색 - 개선된 버전 (빌딩명 기반 매칭)
             if (criteria.station && criteria.station.trim()) {
                 const stationTerm = criteria.station.toLowerCase().trim();
-                
-                // "역" 제거하여 유연한 검색
                 const normalizedSearch = stationTerm.replace(/역$/g, '');
                 
                 console.log(`🔍 역명 검색 시작: "${criteria.station}" → 정규화: "${normalizedSearch}"`);
                 
-                // 디버깅을 위해 처음 몇 개 인근역 데이터 출력
+                // 디버깅을 위한 정보 출력
                 const sampleStations = results.slice(0, 5).map(item => item['인근역']).filter(Boolean);
                 console.log('샘플 인근역 데이터:', sampleStations);
                 
-                // 실제 데이터 구조 확인
                 if (results.length > 0) {
                     console.log('첫 번째 데이터 항목 전체:', JSON.stringify(results[0], null, 2));
                     console.log('데이터 키 목록:', Object.keys(results[0]));
                     
-                    // 인근역 관련 필드 찾기
                     const possibleStationFields = Object.keys(results[0]).filter(key => 
                         key.includes('역') || key.includes('station') || key.includes('지하철') || 
                         key.includes('metro') || key.includes('subway')
                     );
                     console.log('역 관련 가능한 필드들:', possibleStationFields);
                     
-                    // 모든 필드의 샘플 값 보기
                     console.log('=== 첫 번째 항목의 모든 필드 값 ===');
                     Object.keys(results[0]).forEach(key => {
                         console.log(`${key}: "${results[0][key]}"`);
                     });
                 }
                 
-                results = results.filter(item => {
-                    if (!item['인근역']) return false;
-                    const nearbyStation = item['인근역'].toLowerCase();
-                    
-                    // 더 유연한 매칭 - "광화문" 또는 "광화문역" 모두 검색 가능
-                    const isMatched = nearbyStation.includes(normalizedSearch) || 
-                                     nearbyStation.includes(stationTerm) ||
-                                     nearbyStation.includes(normalizedSearch + '역');
-                    
-                    // 광화문 관련 디버깅
-                    if (normalizedSearch === '광화문' && nearbyStation.includes('광화문')) {
-                        console.log(`✅ 광화문 매칭 발견: "${item['인근역']}" (빌딩: ${item['빌딩명']})`);
-                    }
-                    
-                    if (!isMatched) return false;
-                    
-                    // 도보시간 필터링 - 복수 역 정보 처리
-                    if (criteria.walkingTime && criteria.walkingTime.trim()) {
-                        const walkingTime = parseInt(criteria.walkingTime);
+                // 1단계: 인근역 정보가 있고 매칭되는 빌딩명 수집
+                const matchedBuildingNames = new Set();
+                const buildingWalkingTimes = new Map(); // 빌딩별 도보시간 저장
+                
+                results.forEach(item => {
+                    if (item['인근역']) {
+                        const nearbyStation = item['인근역'].toLowerCase();
                         
-                        // 여러 역이 있는 경우 각각 체크 (쉼표로 구분)
-                        const stationParts = nearbyStation.split(',');
-                        
-                        // 검색한 역에 해당하는 부분만 찾기
-                        const relevantPart = stationParts.find(part => 
-                            part.includes(normalizedSearch) || 
-                            part.includes(stationTerm) ||
-                            part.includes(normalizedSearch + '역')
-                        );
-                        
-                        if (relevantPart) {
-                            const match = relevantPart.match(/(\d+)분/);
-                            if (match) {
-                                const itemWalkingTime = parseInt(match[1]);
-                                return itemWalkingTime <= walkingTime;
+                        // 역명 매칭 확인
+                        if (nearbyStation.includes(normalizedSearch) || 
+                            nearbyStation.includes(stationTerm) ||
+                            nearbyStation.includes(normalizedSearch + '역')) {
+                            
+                            matchedBuildingNames.add(item['빌딩명']);
+                            
+                            // 도보시간 추출
+                            const stationParts = nearbyStation.split(',');
+                            const relevantPart = stationParts.find(part => 
+                                part.includes(normalizedSearch) || 
+                                part.includes(stationTerm) ||
+                                part.includes(normalizedSearch + '역')
+                            );
+                            
+                            if (relevantPart) {
+                                const match = relevantPart.match(/(\d+)분/);
+                                if (match) {
+                                    buildingWalkingTimes.set(item['빌딩명'], parseInt(match[1]));
+                                }
+                            }
+                            
+                            // 디버깅용
+                            if (normalizedSearch === '광화문') {
+                                console.log(`✅ 광화문 매칭 발견: "${item['인근역']}" (빌딩: ${item['빌딩명']})`);
                             }
                         }
                     }
-                    
-                    return true;
+                });
+                
+                // 2단계: 매칭된 빌딩명의 모든 데이터 필터링
+                results = results.filter(item => {
+                    // 같은 빌딩명이면 포함
+                    if (matchedBuildingNames.has(item['빌딩명'])) {
+                        // 도보시간 필터링 적용
+                        if (criteria.walkingTime && criteria.walkingTime.trim()) {
+                            const walkingTime = parseInt(criteria.walkingTime);
+                            const buildingWalkTime = buildingWalkingTimes.get(item['빌딩명']);
+                            
+                            if (buildingWalkTime && buildingWalkTime > walkingTime) {
+                                return false;
+                            }
+                        }
+                        return true;
+                    }
+                    return false;
                 });
                 
                 console.log(`역명 '${criteria.station}' 검색 결과: ${results.length}개`);
@@ -320,7 +329,6 @@ const DataManager = {
                 if (results.length === 0) {
                     console.log('⚠️ 검색 결과가 없습니다. 데이터 분석 중...');
                     
-                    // 전체 데이터에서 광화문 관련 항목 찾기
                     const gwangwhamunData = searchArray.filter(item => {
                         const nearbyStation = (item['인근역'] || '').toLowerCase();
                         return nearbyStation.includes('광화문');
@@ -335,7 +343,6 @@ const DataManager = {
                         })));
                     }
                     
-                    // 다른 주요 역들 확인
                     const majorStations = ['강남', '역삼', '삼성', '종로', '시청', '을지로'];
                     console.log('\n=== 주요 역별 데이터 개수 ===');
                     majorStations.forEach(station => {
@@ -345,7 +352,6 @@ const DataManager = {
                         console.log(`${station}: ${count}개`);
                     });
                     
-                    // 전체 인근역 필드가 있는 데이터 개수
                     const withStationInfo = searchArray.filter(item => item['인근역'] && item['인근역'].trim()).length;
                     console.log(`\n인근역 정보가 있는 전체 데이터: ${withStationInfo}개 / ${searchArray.length}개`);
                 }
