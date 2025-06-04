@@ -7,7 +7,7 @@ class PDFSearchManager {
         // 실제 PDF 파일 목록 (수정된 목록)
         this.availablePDFs = new Set([
             'ACT', 'CBRE', 'COL', 'ERA', 'GM', 'HDC', 'JLL', 'KTG', 
-            'KYOBO', 'KYOWON', 'LOTTE', 'MIRAE', 'PLANET', 'SMPMC', 
+            'KYOBO', 'KYOWON', 'LOTTE', 'MIRAE', 'MOVE', 'PLANET', 'SMPMC', 
             'SVS', 'SYA', 'S1', 'data', 'pdf-manager',
             'pdf-viewer', 'search', '세아'
         ]);
@@ -29,6 +29,7 @@ class PDFSearchManager {
             'KYOWON': ['KYOWON'],
             'LOTTE': ['LOTTE'],
             'MIRAE': ['MIRAE'],
+            'MOVE': ['MOVE'],
             'PLANET': ['PLANET'],
             'SMPMC': ['SMPMC'],
             '세아': ['세아'],  // 세미 → 세아로 수정
