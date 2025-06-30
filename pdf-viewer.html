@@ -328,7 +328,7 @@
                 <input type="text" 
                        id="searchInput" 
                        class="search-input" 
-                       placeholder="빌딩명 또는 주소 검색...">
+                       placeholder="면적 숫자만 입력 (예: 100.5)">
                 <button id="searchButton" class="search-button">
                     <i class="bi bi-search"></i>
                 </button>
@@ -418,15 +418,17 @@
             this.pageRendering = false;
             this.pageNumPending = null;
             
-            // URL 파라미터에서 파일명 가져오기
+            // URL 파라미터에서 값 가져오기
             const params = new URLSearchParams(window.location.search);
             this.fileName = params.get('file') || '';
+            this.searchArea = params.get('area') || '';  // 전용면적 또는 임대면적
             
             this.init();
         }
         
         async init() {
             console.log('PDF 뷰어 초기화');
+            console.log('검색할 면적:', this.searchArea);
             
             // 이벤트 리스너 설정
             this.setupEventListeners();
@@ -434,6 +436,13 @@
             // PDF 로드
             if (this.fileName) {
                 await this.loadPDF(this.fileName);
+                
+                // URL 파라미터로 면적값이 전달되었으면 자동 검색
+                if (this.searchArea) {
+                    console.log('면적 자동 검색 시작:', this.searchArea);
+                    document.getElementById('searchInput').value = this.searchArea;
+                    await this.performSearch();
+                }
             } else {
                 this.showError('PDF 파일이 지정되지 않았습니다.');
             }
@@ -486,8 +495,11 @@
                 document.getElementById('totalPages').textContent = `/ ${this.pdfDoc.numPages}`;
                 document.getElementById('pageNum').max = this.pdfDoc.numPages;
                 
-                // 첫 페이지 렌더링
-                await this.renderPage(1);
+                // URL 파라미터로 면적값이 없을 때만 첫 페이지 렌더링
+                if (!this.searchArea) {
+                    // 첫 페이지 렌더링
+                    await this.renderPage(1);
+                }
                 
                 // 썸네일 생성 (처음 5페이지만)
                 this.generateThumbnails();
@@ -610,25 +622,62 @@
             
             let found = false;
             
+            // 숫자 검색인지 확인 (소수점 포함)
+            const isNumericSearch = /^\d+\.?\d*$/.test(searchText);
+            
             // 모든 페이지에서 검색
             for (let i = 1; i <= this.pdfDoc.numPages; i++) {
                 const page = await this.pdfDoc.getPage(i);
                 const textContent = await page.getTextContent();
                 const text = textContent.items.map(item => item.str).join(' ');
                 
-                // 대소문자 구분 없이 검색
-                if (text.toLowerCase().includes(searchText.toLowerCase())) {
-                    console.log(`"${searchText}"를 ${i}페이지에서 찾았습니다.`);
-                    await this.goToPage(i);
-                    found = true;
-                    break;
+                if (isNumericSearch) {
+                    // 숫자 검색 (면적)
+                    // 텍스트에서 모든 숫자 추출
+                    const numbers = text.match(/\d+\.?\d*/g) || [];
+                    
+                    for (const num of numbers) {
+                        // 정확한 숫자 매칭
+                        if (num === searchText) {
+                            console.log(`면적 "${searchText}"를 ${i}페이지에서 찾았습니다.`);
+                            
+                            // 숫자 주변 텍스트 확인 (전용면적, 임대면적 등의 키워드가 있는지)
+                            const contextRegex = new RegExp(`(전용면적|임대면적|계약면적|공급면적).{0,20}${searchText}|${searchText}.{0,20}(전용면적|임대면적|계약면적|공급면적|㎡|평)`, 'gi');
+                            const contextMatch = text.match(contextRegex);
+                            
+                            if (contextMatch) {
+                                console.log('면적 컨텍스트 확인:', contextMatch[0]);
+                                await this.goToPage(i);
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    // 일반 텍스트 검색 (빌딩명, 주소)
+                    // 띄어쓰기 무시하고 검색
+                    const normalizedSearchText = searchText.replace(/\s+/g, '');
+                    const normalizedPageText = text.replace(/\s+/g, '');
+                    
+                    if (normalizedPageText.toLowerCase().includes(normalizedSearchText.toLowerCase())) {
+                        console.log(`"${searchText}"를 ${i}페이지에서 찾았습니다.`);
+                        await this.goToPage(i);
+                        found = true;
+                        break;
+                    }
                 }
+                
+                if (found) break;
             }
             
             this.showLoading(false);
             
             if (!found) {
-                alert(`"${searchText}"를 찾을 수 없습니다.\n정확한 빌딩명이나 주소를 입력해주세요.`);
+                if (isNumericSearch) {
+                    alert(`면적 "${searchText}"를 찾을 수 없습니다.\n정확한 전용면적이나 임대면적을 입력해주세요.`);
+                } else {
+                    alert(`"${searchText}"를 찾을 수 없습니다.\n정확한 빌딩명, 주소, 또는 면적(숫자)을 입력해주세요.`);
+                }
             }
         }
         
