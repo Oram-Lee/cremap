@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 뷰어 - CRE 빌딩 검색</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    
+    <style>
+        /* 전체 레이아웃 */
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        /* 헤더 스타일 */
+        .pdf-header {
+            background: #2c3e50;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            height: 60px;
+        }
+        
+        .pdf-title {
+            font-size: 18px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .pdf-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        /* 검색 바 */
+        .search-container {
+            display: flex;
+            align-items: center;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            padding: 5px 10px;
+        }
+        
+        .search-input {
+            background: none;
+            border: none;
+            color: white;
+            outline: none;
+            width: 250px;
+            font-size: 14px;
+        }
+        
+        .search-input::placeholder {
+            color: rgba(255,255,255,0.7);
+        }
+        
+        .search-button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 3px;
+            transition: background 0.2s;
+        }
+        
+        .search-button:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        /* 페이지 네비게이션 */
+        .page-navigation {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255,255,255,0.1);
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        
+        .page-input {
+            width: 50px;
+            text-align: center;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            border-radius: 3px;
+            padding: 3px;
+        }
+        
+        /* 줌 컨트롤 */
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .zoom-select {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            border-radius: 3px;
+            padding: 5px;
+            cursor: pointer;
+        }
+        
+        .zoom-select option {
+            background: #2c3e50;
+        }
+        
+        /* 메인 컨테이너 */
+        .pdf-container {
+            display: flex;
+            height: calc(100vh - 60px);
+            position: relative;
+        }
+        
+        /* 사이드바 */
+        .sidebar {
+            width: 200px;
+            background: white;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+            transition: margin-left 0.3s;
+        }
+        
+        .sidebar.hidden {
+            margin-left: -200px;
+        }
+        
+        .sidebar-header {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            font-weight: 500;
+            background: #f8f9fa;
+            font-size: 14px;
+        }
+        
+        /* 썸네일 */
+        .thumbnails {
+            padding: 10px;
+        }
+        
+        .thumbnail-item {
+            margin-bottom: 10px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            overflow: hidden;
+            transition: all 0.2s ease;
+            position: relative;
+            background: #f8f9fa;
+        }
+        
+        .thumbnail-item:hover {
+            border-color: #2196F3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .thumbnail-item.active {
+            border-color: #1976D2;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        .thumbnail-canvas {
+            width: 100%;
+            display: block;
+        }
+        
+        .thumbnail-label {
+            text-align: center;
+            padding: 5px;
+            background: #f8f9fa;
+            font-size: 12px;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        /* PDF 뷰어 영역 */
+        .pdf-viewer {
+            flex: 1;
+            overflow: auto;
+            background: #e0e0e0;
+            position: relative;
+        }
+        
+        .pdf-pages {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .pdf-page {
+            background: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        
+        .pdf-page canvas {
+            display: block;
+            max-width: 100%;
+        }
+        
+        /* 로딩 화면 */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255,255,255,0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #2196F3;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #666;
+        }
+        
+        /* 에러 메시지 */
+        .error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            padding: 40px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .error-icon {
+            font-size: 48px;
+            color: #f44336;
+            margin-bottom: 20px;
+        }
+        
+        /* 자동 검색 상태 표시 */
+        .auto-search-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #2196F3;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            display: none;
+            z-index: 100;
+        }
+        
+        .auto-search-indicator.active {
+            display: block;
+        }
+        
+        /* 모바일 대응 */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                z-index: 100;
+                height: 100%;
+                box-shadow: 2px 0 4px rgba(0,0,0,0.1);
+                top: 60px;
+                height: calc(100% - 60px);
+            }
+            
+            .search-input {
+                width: 150px;
+                font-size: 12px;
+            }
+            
+            .pdf-controls {
+                gap: 10px;
+            }
+            
+            .page-navigation {
+                font-size: 11px;
+                padding: 3px 6px;
+            }
+            
+            .page-input {
+                width: 35px;
+                font-size: 11px;
+            }
+            
+            .zoom-select {
+                width: 60px;
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 헤더 -->
+    <div class="pdf-header">
+        <div class="pdf-title">
+            <button id="toggleSidebar" class="btn btn-sm btn-outline-light">
+                <i class="bi bi-list"></i>
+            </button>
+            <span id="documentTitle">PDF 뷰어</span>
+        </div>
+        
+        <div class="pdf-controls">
+            <!-- 검색 -->
+            <div class="search-container">
+                <input type="text" 
+                       id="searchInput" 
+                       class="search-input" 
+                       placeholder="빌딩명 또는 주소 입력">
+                <button id="searchButton" class="search-button">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+            
+            <!-- 페이지 네비게이션 -->
+            <div class="page-navigation">
+                <button id="prevPage" class="btn btn-sm btn-outline-light">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                <input type="number" 
+                       id="pageNum" 
+                       class="page-input" 
+                       value="1" 
+                       min="1">
+                <span id="totalPages" style="color: rgba(255,255,255,0.8)">/ 1</span>
+                <button id="nextPage" class="btn btn-sm btn-outline-light">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
+            
+            <!-- 줌 컨트롤 -->
+            <div class="zoom-controls">
+                <button id="zoomOut" class="btn btn-sm btn-outline-light">
+                    <i class="bi bi-zoom-out"></i>
+                </button>
+                <select id="zoomSelect" class="zoom-select">
+                    <option value="0.75">75%</option>
+                    <option value="1" selected>100%</option>
+                    <option value="1.25">125%</option>
+                    <option value="1.5">150%</option>
+                </select>
+                <button id="zoomIn" class="btn btn-sm btn-outline-light">
+                    <i class="bi bi-zoom-in"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 메인 컨테이너 -->
+    <div class="pdf-container">
+        <!-- 사이드바 -->
+        <div class="sidebar" id="sidebar">
+            <!-- 썸네일 -->
+            <div class="sidebar-header">
+                <i class="bi bi-grid-3x3-gap"></i> 페이지 미리보기
+            </div>
+            <div class="thumbnails" id="thumbnails">
+                <!-- 썸네일이 여기에 동적으로 추가됨 -->
+            </div>
+        </div>
+        
+        <!-- PDF 뷰어 -->
+        <div class="pdf-viewer" id="pdfViewer">
+            <!-- 자동 검색 표시 -->
+            <div class="auto-search-indicator" id="autoSearchIndicator">
+                <i class="bi bi-search"></i> 면적 검색 중...
+            </div>
+            
+            <!-- 로딩 화면 -->
+            <div class="loading-overlay" id="loadingOverlay">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">PDF를 불러오는 중...</div>
+            </div>
+            
+            <!-- PDF 페이지들 -->
+            <div class="pdf-pages" id="pdfPages">
+                <!-- PDF 페이지가 여기에 렌더링됨 -->
+            </div>
+            
+            <!-- 에러 메시지 -->
+            <div class="error-message" id="errorMessage" style="display: none;">
+                <div class="error-icon">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                </div>
+                <h4>PDF를 불러올 수 없습니다</h4>
+                <p id="errorText">파일을 찾을 수 없거나 손상되었습니다.</p>
+                <button class="btn btn-primary mt-3" onclick="location.reload()">
+                    다시 시도
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- PDF 뷰어 스크립트 -->
+    <script>
+    class SimplePDFViewer {
+        constructor() {
+            this.pdfDoc = null;
+            this.currentPage = 1;
+            this.scale = 1.0;
+            this.pageRendering = false;
+            this.pageNumPending = null;
+            this.isAutoSearching = false; // 자동 검색 중 플래그
+            
+            // URL 파라미터에서 값 가져오기
+            const params = new URLSearchParams(window.location.search);
+            this.fileName = params.get('file') || '';
+            
+            // 면적값 추출 (다양한 파라미터에서 시도)
+            this.searchArea = params.get('area') || params.get('exclusive') || params.get('rent') || '';
+            
+            // 빌딩명 등 다른 검색어
+            this.searchText = params.get('search') || '';
+            this.fallbackSearches = params.get('fallback') ? params.get('fallback').split('|') : [];
+            
+            console.log('URL 파라미터:', {
+                file: this.fileName,
+                area: this.searchArea,
+                exclusive: params.get('exclusive'),
+                rent: params.get('rent'),
+                search: this.searchText
+            });
+            console.log('추출된 면적값:', this.searchArea);
+            console.log('추출된 검색어:', this.searchText);
+            
+            this.init();
+        }
+        
+        async init() {
+            console.log('PDF 뷰어 초기화');
+            console.log('검색할 면적:', this.searchArea);
+            
+            // 이벤트 리스너 설정
+            this.setupEventListeners();
+            
+            // PDF 로드
+            if (this.fileName) {
+                await this.loadPDF(this.fileName);
+                
+                // 면적 검색이 우선
+                if (this.searchArea) {
+                    console.log('면적 자동 검색 시작:', this.searchArea);
+                    this.isAutoSearching = true;
+                    document.getElementById('autoSearchIndicator').classList.add('active');
+                    // 검색창 비우기
+                    document.getElementById('searchInput').value = '';
+                    
+                    const found = await this.autoSearch(this.searchArea);
+                    
+                    this.isAutoSearching = false;
+                    document.getElementById('autoSearchIndicator').classList.remove('active');
+                    
+                    // 면적 검색 실패 시 빌딩명으로 재시도
+                    if (!found && this.searchText) {
+                        console.log('면적 검색 실패, 빌딩명으로 재시도:', this.searchText);
+                        document.getElementById('searchInput').value = this.searchText;
+                        // 자동으로 검색 실행하지 않고 사용자가 수동으로 하도록 안내
+                    }
+                } else {
+                    // 면적이 없으면 첫 페이지 표시
+                    await this.renderPage(1);
+                    
+                    // 검색어가 있으면 검색창에 표시
+                    if (this.searchText) {
+                        document.getElementById('searchInput').value = this.searchText;
+                    }
+                }
+            } else {
+                this.showError('PDF 파일이 지정되지 않았습니다.');
+            }
+        }
+        
+        setupEventListeners() {
+            // 사이드바 토글
+            document.getElementById('toggleSidebar').addEventListener('click', () => {
+                document.getElementById('sidebar').classList.toggle('hidden');
+            });
+            
+            // 검색 - 자동 검색 중이면 무시
+            document.getElementById('searchButton').addEventListener('click', () => {
+                if (!this.isAutoSearching) {
+                    this.performSearch();
+                }
+            });
+            
+            document.getElementById('searchInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !this.isAutoSearching) {
+                    this.performSearch();
+                }
+            });
+            
+            // 페이지 네비게이션
+            document.getElementById('prevPage').addEventListener('click', () => this.previousPage());
+            document.getElementById('nextPage').addEventListener('click', () => this.nextPage());
+            document.getElementById('pageNum').addEventListener('change', (e) => {
+                const page = parseInt(e.target.value);
+                if (page >= 1 && page <= this.pdfDoc.numPages) {
+                    this.goToPage(page);
+                }
+            });
+            
+            // 줌 컨트롤
+            document.getElementById('zoomIn').addEventListener('click', () => this.zoomIn());
+            document.getElementById('zoomOut').addEventListener('click', () => this.zoomOut());
+            document.getElementById('zoomSelect').addEventListener('change', (e) => {
+                this.scale = parseFloat(e.target.value);
+                this.renderPage(this.currentPage);
+            });
+        }
+        
+        async loadPDF(fileName) {
+            try {
+                this.showLoading(true);
+                
+                const url = `./pdfs/${fileName}`;
+                console.log('PDF 로드 중:', url);
+                
+                // PDF 로드
+                const loadingTask = pdfjsLib.getDocument(url);
+                this.pdfDoc = await loadingTask.promise;
+                
+                // 문서 정보 업데이트
+                document.getElementById('documentTitle').textContent = fileName;
+                document.getElementById('totalPages').textContent = `/ ${this.pdfDoc.numPages}`;
+                document.getElementById('pageNum').max = this.pdfDoc.numPages;
+                
+                // 썸네일 생성
+                this.generateThumbnails();
+                
+                this.showLoading(false);
+                
+            } catch (error) {
+                console.error('PDF 로드 실패:', error);
+                this.showError(`PDF 로드 실패: ${error.message}`);
+            }
+        }
+        
+        async autoSearch(searchText) {
+            console.log('자동 검색 시작:', searchText);
+            this.showLoading(true);
+            
+            let found = false;
+            
+            // 모든 페이지에서 검색
+            for (let i = 1; i <= this.pdfDoc.numPages; i++) {
+                try {
+                    const page = await this.pdfDoc.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const text = textContent.items.map(item => item.str).join(' ');
+                    
+                    // 디버깅: 각 페이지의 텍스트 정보
+                    if (i <= 5) { // 처음 5페이지만 로그
+                        console.log(`\n=== ${i}페이지 분석 ===`);
+                        console.log(`텍스트 길이: ${text.length}자`);
+                        
+                        // 텍스트 샘플 출력
+                        if (text.length > 0) {
+                            console.log('텍스트 샘플:', text.substring(0, 200) + '...');
+                        }
+                        
+                        // 모든 숫자 패턴 찾기
+                        const allNumbers = text.match(/\d+[.,]?\d*/g) || [];
+                        console.log(`발견된 숫자 개수: ${allNumbers.length}`);
+                        
+                        // 398 근처의 숫자들만 필터링
+                        const nearNumbers = allNumbers.filter(num => {
+                            const numValue = parseFloat(num.replace(',', '.'));
+                            return numValue >= 390 && numValue <= 410;
+                        });
+                        
+                        if (nearNumbers.length > 0) {
+                            console.log('398 근처 숫자들:', nearNumbers);
+                        }
+                    }
+                    
+                    // 검색할 숫자값 (소수점 처리)
+                    const searchValue = parseFloat(searchText);
+                    console.log(`검색 숫자값: ${searchValue}`);
+                    
+                    // 텍스트에서 모든 숫자 찾기 (다양한 형식 지원)
+                    const numberPattern = /\d+([.,]\d+)?/g;
+                    const numbers = text.match(numberPattern) || [];
+                    
+                    for (const numStr of numbers) {
+                        // 쉼표를 점으로 변환하고 숫자로 변환
+                        const numValue = parseFloat(numStr.replace(',', '.'));
+                        
+                        // 숫자 값 비교 (부동소수점 정밀도 고려)
+                        if (Math.abs(numValue - searchValue) < 0.001) {
+                            console.log(`${i}페이지에서 일치하는 숫자 발견: ${numStr} (값: ${numValue})`);
+                            
+                            // 해당 숫자의 위치 찾기
+                            const index = text.indexOf(numStr);
+                            if (index === -1) continue;
+                            
+                            // 주변 텍스트 추출
+                            const contextStart = Math.max(0, index - 100);
+                            const contextEnd = Math.min(text.length, index + numStr.length + 100);
+                            const context = text.substring(contextStart, contextEnd);
+                            
+                            console.log(`매치 주변 텍스트: "${context}"`);
+                            
+                            // 면적 관련 키워드 확인
+                            const areaKeywords = /(전용|임대|계약|공급|면적|㎡|평|坪|층|호|실|오피스|사무실)/i;
+                            if (areaKeywords.test(context)) {
+                                console.log(`✅ 면적 "${numStr}"를 ${i}페이지에서 찾았습니다!`);
+                                this.showLoading(false);
+                                await this.renderPage(i);
+                                this.updateActiveThumbnail(i);
+                                return true;
+                            }
+                        }
+                    }
+                    
+                    // 추가: 정수부와 소수부가 분리된 경우 처리
+                    const integerPart = Math.floor(searchValue);
+                    const decimalPart = Math.round((searchValue - integerPart) * 100);
+                    
+                    if (decimalPart > 0) {
+                        // "398 . 00" 또는 "398 .00" 형태 검색
+                        const spacedPattern = new RegExp(`${integerPart}\\s*[.,]\\s*${decimalPart}`, 'g');
+                        const spacedMatches = text.match(spacedPattern);
+                        
+                        if (spacedMatches) {
+                            console.log(`${i}페이지에서 분리된 형태 발견:`, spacedMatches);
+                            
+                            for (const match of spacedMatches) {
+                                const index = text.indexOf(match);
+                                const contextStart = Math.max(0, index - 100);
+                                const contextEnd = Math.min(text.length, index + match.length + 100);
+                                const context = text.substring(contextStart, contextEnd);
+                                
+                                const areaKeywords = /(전용|임대|계약|공급|면적|㎡|평|坪|층|호|실|오피스|사무실)/i;
+                                if (areaKeywords.test(context)) {
+                                    console.log(`✅ 분리된 면적 "${match}"를 ${i}페이지에서 찾았습니다!`);
+                                    this.showLoading(false);
+                                    await this.renderPage(i);
+                                    this.updateActiveThumbnail(i);
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 추가 검색: textContent.items를 개별적으로 확인
+                    for (const item of textContent.items) {
+                        const itemText = item.str;
+                        if (itemText.includes('398') || itemText.includes('9')) {
+                            // 인접한 아이템들 확인
+                            const itemIndex = textContent.items.indexOf(item);
+                            const nearbyTexts = textContent.items
+                                .slice(Math.max(0, itemIndex - 5), itemIndex + 5)
+                                .map(it => it.str)
+                                .join(' ');
+                            
+                            if (nearbyTexts.includes('398') && nearbyTexts.includes('9')) {
+                                console.log(`${i}페이지에서 분리된 숫자 발견:`, nearbyTexts);
+                                
+                                if (/(전용|임대|면적|평)/.test(nearbyTexts)) {
+                                    console.log(`✅ 분리된 면적을 ${i}페이지에서 찾았습니다!`);
+                                    this.showLoading(false);
+                                    await this.renderPage(i);
+                                    this.updateActiveThumbnail(i);
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    
+                } catch (error) {
+                    console.error(`${i}페이지 검색 중 오류:`, error);
+                }
+            }
+            
+            this.showLoading(false);
+            
+            if (!found) {
+                console.log('❌ 면적을 찾을 수 없습니다.');
+                alert(`면적 ${searchText}을(를) PDF에서 찾을 수 없습니다.\n빌딩명이나 주소로 다시 검색해주세요.`);
+                await this.renderPage(1);
+            }
+            
+            return found;
+        }
+        
+        async performSearch() {
+            const searchText = document.getElementById('searchInput').value.trim();
+            if (!searchText || !this.pdfDoc) return;
+            
+            console.log('검색 시작:', searchText);
+            this.showLoading(true);
+            
+            let found = false;
+            
+            // 숫자 검색인지 확인 (소수점 포함)
+            const isNumericSearch = /^\d+[.,]?\d*$/.test(searchText);
+            
+            if (isNumericSearch) {
+                // 숫자 검색은 autoSearch 로직 사용
+                found = await this.autoSearch(searchText);
+            } else {
+                // 텍스트 검색
+                for (let i = 1; i <= this.pdfDoc.numPages; i++) {
+                    const page = await this.pdfDoc.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const text = textContent.items.map(item => item.str).join(' ');
+                    
+                    // 띄어쓰기 무시하고 검색
+                    const normalizedSearchText = searchText.replace(/\s+/g, '');
+                    const normalizedPageText = text.replace(/\s+/g, '');
+                    
+                    if (normalizedPageText.toLowerCase().includes(normalizedSearchText.toLowerCase())) {
+                        console.log(`"${searchText}"를 ${i}페이지에서 찾았습니다.`);
+                        await this.goToPage(i);
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            
+            this.showLoading(false);
+            
+            if (!found) {
+                alert(`"${searchText}"을(를) 찾을 수 없습니다.`);
+            }
+        }
+        
+        async renderPage(pageNumber) {
+            if (this.pageRendering) {
+                this.pageNumPending = pageNumber;
+                return;
+            }
+            
+            this.pageRendering = true;
+            this.currentPage = pageNumber;
+            
+            try {
+                const page = await this.pdfDoc.getPage(pageNumber);
+                const viewport = page.getViewport({ scale: this.scale });
+                
+                // 기존 페이지 제거
+                const pdfPages = document.getElementById('pdfPages');
+                pdfPages.innerHTML = '';
+                
+                // 새 캔버스 생성
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'pdf-page';
+                
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // 캔버스 크기 설정
+                const outputScale = window.devicePixelRatio || 1;
+                canvas.width = Math.floor(viewport.width * outputScale);
+                canvas.height = Math.floor(viewport.height * outputScale);
+                canvas.style.width = Math.floor(viewport.width) + 'px';
+                canvas.style.height = Math.floor(viewport.height) + 'px';
+                
+                ctx.scale(outputScale, outputScale);
+                
+                pageDiv.appendChild(canvas);
+                pdfPages.appendChild(pageDiv);
+                
+                // 페이지 렌더링
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+                
+                await page.render(renderContext).promise;
+                
+                // 페이지 번호 업데이트
+                document.getElementById('pageNum').value = pageNumber;
+                
+                // 썸네일 활성화
+                this.updateActiveThumbnail(pageNumber);
+                
+            } catch (error) {
+                console.error('페이지 렌더링 실패:', error);
+            }
+            
+            this.pageRendering = false;
+            
+            if (this.pageNumPending !== null) {
+                const pending = this.pageNumPending;
+                this.pageNumPending = null;
+                this.renderPage(pending);
+            }
+        }
+        
+        async generateThumbnails() {
+            const container = document.getElementById('thumbnails');
+            container.innerHTML = '';
+            
+            // 처음 5페이지만 썸네일 생성
+            const maxThumbnails = Math.min(5, this.pdfDoc.numPages);
+            
+            for (let i = 1; i <= maxThumbnails; i++) {
+                const page = await this.pdfDoc.getPage(i);
+                const viewport = page.getViewport({ scale: 0.3 });
+                
+                const thumbnailDiv = document.createElement('div');
+                thumbnailDiv.className = 'thumbnail-item';
+                if (i === 1) thumbnailDiv.classList.add('active');
+                thumbnailDiv.onclick = () => this.goToPage(i);
+                
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.className = 'thumbnail-canvas';
+                
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                
+                await page.render({
+                    canvasContext: ctx,
+                    viewport: viewport
+                }).promise;
+                
+                const label = document.createElement('div');
+                label.className = 'thumbnail-label';
+                label.textContent = `페이지 ${i}`;
+                
+                thumbnailDiv.appendChild(canvas);
+                thumbnailDiv.appendChild(label);
+                container.appendChild(thumbnailDiv);
+            }
+        }
+        
+        updateActiveThumbnail(pageNumber) {
+            document.querySelectorAll('.thumbnail-item').forEach((item, index) => {
+                if (index + 1 === pageNumber) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+        }
+        
+        goToPage(pageNumber) {
+            if (pageNumber >= 1 && pageNumber <= this.pdfDoc.numPages) {
+                console.log(`페이지 ${pageNumber}로 이동`);
+                this.renderPage(pageNumber);
+            }
+        }
+        
+        previousPage() {
+            if (this.currentPage <= 1) return;
+            this.goToPage(this.currentPage - 1);
+        }
+        
+        nextPage() {
+            if (this.currentPage >= this.pdfDoc.numPages) return;
+            this.goToPage(this.currentPage + 1);
+        }
+        
+        zoomIn() {
+            this.scale = Math.min(this.scale * 1.2, 2);
+            document.getElementById('zoomSelect').value = this.scale;
+            this.renderPage(this.currentPage);
+        }
+        
+        zoomOut() {
+            this.scale = Math.max(this.scale / 1.2, 0.5);
+            document.getElementById('zoomSelect').value = this.scale;
+            this.renderPage(this.currentPage);
+        }
+        
+        showLoading(show) {
+            document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
+        }
+        
+        showError(message) {
+            this.showLoading(false);
+            document.getElementById('errorMessage').style.display = 'block';
+            document.getElementById('errorText').textContent = message;
+        }
+    }
+    
+    // PDF 뷰어 초기화
+    let pdfViewer;
+    document.addEventListener('DOMContentLoaded', () => {
+        pdfViewer = new SimplePDFViewer();
+    });
+    </script>
+</body>
+</html>
