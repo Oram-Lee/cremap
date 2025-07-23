@@ -7,7 +7,7 @@ class PDFSearchManager {
         // 실제 PDF 파일 목록 (MOVE 추가)
         this.availablePDFs = new Set([
             'ACT', 'CBRE', 'COL', 'ERA', 'GM', 'HDC', 'JLL', 'KTG', 
-            'KYOBO', 'KYOWON', 'LOTTE', 'MIRAE', 'MOVE', 'PLANET', 'SMPMC', 
+            'KYOBO', 'KYOWON', 'LOTTE', 'MIRAE', 'MOVE', 'PLANET', 'SMPMC',  'IFC',  'THEBARN',
             'SVS', 'SYA', 'S1', 'RS', 'CW', 'data', 'pdf-manager',
             'pdf-viewer', 'search', '세아'
         ]);
@@ -35,6 +35,8 @@ class PDFSearchManager {
             'RS': ['RS'],      // RS 추가
             'CW': ['CW'],      // CW 추가
             '세아': ['세아'],  
+            'IFC': ['IFC'],  
+            'THEBARN': ['THEBARN'],  
         };
         
         // PDF 존재 여부 캐시
