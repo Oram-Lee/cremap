@@ -307,7 +307,7 @@ const DataManager = {
                 console.log(`지역명 '${criteria.district}' 검색 결과: ${results.length}개`);
             }
             
-            // 역명 검색 - ⭐ 정확한 역명만 매칭하도록 완전히 수정
+            // 역명 검색 - ⭐ 개선된 로직 적용
             if (criteria.station && criteria.station.trim()) {
                 const stationTerm = criteria.station.toLowerCase().trim();
                 const normalizedSearch = stationTerm.replace(/역$/g, '');
@@ -317,19 +317,10 @@ const DataManager = {
                     
                     const nearbyStation = item['인근역'].toLowerCase();
                     
-                    // 역명이 정확히 매칭되는지 확인
-                    // 1. "역" 단위로 분리 (예: "강남역", "강남구청역" 등)
-                    const stationPattern = /([가-힣a-zA-Z0-9]+역)/g;
-                    const stations = nearbyStation.match(stationPattern) || [];
-                    
-                    // 2. 추출된 역명 중에서 정확히 매칭되는지 확인
-                    const isMatch = stations.some(station => {
-                        const stationName = station.replace(/역$/g, '');
-                        // 정확한 매칭만 허용
-                        return stationName === normalizedSearch || 
-                               station === stationTerm ||
-                               station === (normalizedSearch + '역');
-                    });
+                    // 단어 경계를 확인하는 정규식 사용
+                    // \b는 단어 경계를 의미 (공백, 구두점 등)
+                    const searchPattern = new RegExp(`\\b${normalizedSearch}역?\\b`);
+                    const isMatch = searchPattern.test(nearbyStation);
                     
                     // 도보시간 필터링
                     if (isMatch && criteria.walkingTime && criteria.walkingTime.trim()) {
