@@ -307,7 +307,7 @@ const DataManager = {
                 console.log(`지역명 '${criteria.district}' 검색 결과: ${results.length}개`);
             }
             
-            // 역명 검색 - ⭐ 개선된 로직 적용
+            // 역명 검색
             if (criteria.station && criteria.station.trim()) {
                 const stationTerm = criteria.station.toLowerCase().trim();
                 const normalizedSearch = stationTerm.replace(/역$/g, '');
@@ -317,10 +317,10 @@ const DataManager = {
                     
                     const nearbyStation = item['인근역'].toLowerCase();
                     
-                    // 단어 경계를 확인하는 정규식 사용
-                    // \b는 단어 경계를 의미 (공백, 구두점 등)
-                    const searchPattern = new RegExp(`\\b${normalizedSearch}역?\\b`);
-                    const isMatch = searchPattern.test(nearbyStation);
+                    // 역명 매칭
+                    const isMatch = nearbyStation.includes(normalizedSearch) || 
+                                  nearbyStation.includes(stationTerm) ||
+                                  nearbyStation.includes(normalizedSearch + '역');
                     
                     // 도보시간 필터링
                     if (isMatch && criteria.walkingTime && criteria.walkingTime.trim()) {
