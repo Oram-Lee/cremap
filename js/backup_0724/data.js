@@ -91,8 +91,8 @@ const DataManager = {
                         // buildings 배열의 공실 정보를 vacancies로 복사
                         this.excelData.vacancies = vacanciesInBuildings;
                     } else {
-                        console.log('📋 buildings에 공실 정보가 없음, 빈 배열 사용');
-                        this.excelData.vacancies = [];
+                        console.log('📋 buildings에 공실 정보가 없음, 전체를 사용');
+                        this.excelData.vacancies = this.excelData.buildings;
                     }
                 }
             }
@@ -118,190 +118,74 @@ const DataManager = {
         }
     },
     
-    // ⭐ 개선된 데이터 병합 메서드 - 양방향 데이터 보완
+    // ⭐ 새로운 메서드: 데이터 병합
     mergeData() {
-        console.group('🔄 데이터 병합 시작 (개선된 버전)');
+        console.group('🔄 데이터 병합 시작');
         
-        // 1단계: 빌딩 정보와 공실 정보를 Map으로 구성
+        // 빌딩 정보를 Map으로 구성 (빠른 검색을 위해)
         const buildingMap = new Map();
-        const vacancyMap = new Map();
         
-        // 빌딩 정보 Map 생성
         if (this.excelData.buildings) {
             this.excelData.buildings.forEach(building => {
+                // 빌딩명 정규화
                 const cleanedName = building['빌딩명'] ? 
                     building['빌딩명'].replace(/[\u200B-\u200D\uFEFF\u202C]/g, '').trim() : '';
                 const source = building['출처회사'] || building['출처'] || '';
                 const key = `${cleanedName}_${source}`;
                 
-                if (!buildingMap.has(key)) {
-                    buildingMap.set(key, []);
-                }
-                buildingMap.get(key).push(building);
+                buildingMap.set(key, building);
             });
         }
         
-        // 공실 정보 Map 생성
+        console.log(`📋 빌딩 맵 생성: ${buildingMap.size}개`);
+        
+        // 병합된 데이터 생성
+        this.mergedData = [];
+        
         if (this.excelData.vacancies) {
             this.excelData.vacancies.forEach(vacancy => {
+                // 빌딩명 정규화
                 const cleanedName = vacancy['빌딩명'] ? 
                     vacancy['빌딩명'].replace(/[\u200B-\u200D\uFEFF\u202C]/g, '').trim() : '';
                 const source = vacancy['출처회사'] || vacancy['출처'] || '';
                 const key = `${cleanedName}_${source}`;
                 
-                if (!vacancyMap.has(key)) {
-                    vacancyMap.set(key, []);
-                }
-                vacancyMap.get(key).push(vacancy);
-            });
-        }
-        
-        console.log(`📋 빌딩 맵 생성: ${buildingMap.size}개 고유 빌딩`);
-        console.log(`📋 공실 맵 생성: ${vacancyMap.size}개 고유 빌딩`);
-        
-        // 2단계: 병합된 데이터 생성
-        this.mergedData = [];
-        const processedKeys = new Set();
-        
-        // 2-1: 공실이 있는 빌딩 처리 (기존 방식 + 개선)
-        vacancyMap.forEach((vacancies, key) => {
-            const buildingInfoList = buildingMap.get(key) || [];
-            
-            // 빌딩 정보를 통합 (여러 레코드가 있을 경우)
-            const consolidatedBuildingInfo = this.consolidateBuildingInfo(buildingInfoList);
-            
-            vacancies.forEach(vacancy => {
-                // 병합 객체 생성
-                const merged = { ...consolidatedBuildingInfo };
+                // 매칭되는 빌딩 정보 찾기
+                const buildingInfo = buildingMap.get(key) || {};
                 
-                // 공실 정보로 덮어쓰기 (빈 값 제외)
+                // ⭐ 빈 값을 무시하고 병합하는 로직
+                const merged = { ...buildingInfo };  // 빌딩 정보를 기본으로
+                
+                // vacancy의 각 필드를 확인하여 빈 값이 아닌 경우만 덮어쓰기
                 Object.keys(vacancy).forEach(field => {
                     const value = vacancy[field];
+                    // 값이 존재하고, 빈 문자열이 아닌 경우만 병합
                     if (value !== '' && value !== null && value !== undefined) {
                         merged[field] = value;
                     }
                 });
                 
-                // 빈 필드 양방향 보완
-                this.fillMissingFields(merged, consolidatedBuildingInfo, vacancy);
-                
                 // 정규화된 빌딩명 사용
-                const [cleanedName, source] = key.split('_');
                 merged.빌딩명 = cleanedName;
                 
                 this.mergedData.push(merged);
             });
-            
-            processedKeys.add(key);
-        });
+        }
         
-        // 2-2: 공실이 없는 빌딩도 추가 (새로운 기능)
-        buildingMap.forEach((buildings, key) => {
-            if (!processedKeys.has(key)) {
-                // 공실 정보가 없는 빌딩
-                const consolidatedBuildingInfo = this.consolidateBuildingInfo(buildings);
-                
-                // 같은 빌딩의 공실 정보가 있는지 다른 출처에서 확인
-                const [cleanedName] = key.split('_');
-                const relatedVacancyInfo = this.findRelatedVacancyInfo(cleanedName, vacancyMap);
-                
-                // 병합 객체 생성
-                const merged = { ...consolidatedBuildingInfo };
-                
-                // 관련 공실 정보에서 주소, 인근역 등 보완
-                if (relatedVacancyInfo) {
-                    this.fillMissingFields(merged, consolidatedBuildingInfo, relatedVacancyInfo);
-                }
-                
-                // 정규화된 빌딩명 사용
-                merged.빌딩명 = cleanedName;
-                
-                // 공실 정보가 없음을 표시
-                if (!merged['공실층']) merged['공실층'] = '-';
-                if (!merged['공실전용면적(평)']) merged['공실전용면적(평)'] = '-';
-                if (!merged['공실임대면적(평)']) merged['공실임대면적(평)'] = '-';
-                
-                this.mergedData.push(merged);
-            }
-        });
+        // 공실 정보가 없는 빌딩도 포함할지 여부 (선택적)
+        // 현재는 공실이 있는 빌딩만 검색 대상으로 함
         
         console.log(`✅ 데이터 병합 완료: ${this.mergedData.length}개 레코드`);
-        console.log(`   - 공실 있는 빌딩: ${processedKeys.size}개`);
-        console.log(`   - 공실 없는 빌딩: ${buildingMap.size - processedKeys.size}개`);
         
         // 병합 결과 샘플 출력
         if (this.mergedData.length > 0) {
-            console.log('병합 결과 샘플 (첫 5개):');
-            this.mergedData.slice(0, 5).forEach((item, index) => {
+            console.log('병합 결과 샘플 (첫 3개):');
+            this.mergedData.slice(0, 3).forEach((item, index) => {
                 console.log(`[${index + 1}] 빌딩: ${item.빌딩명}, 층: ${item.공실층}, 주소: ${item.주소 ? '있음' : '없음'}, 인근역: ${item.인근역 ? '있음' : '없음'}`);
             });
         }
         
         console.groupEnd();
-    },
-    
-    // 여러 빌딩 정보를 하나로 통합
-    consolidateBuildingInfo(buildingList) {
-        if (buildingList.length === 0) return {};
-        if (buildingList.length === 1) return { ...buildingList[0] };
-        
-        // 첫 번째 빌딩 정보를 기본으로
-        const consolidated = { ...buildingList[0] };
-        
-        // 나머지 빌딩 정보에서 빈 필드 채우기
-        for (let i = 1; i < buildingList.length; i++) {
-            const building = buildingList[i];
-            Object.keys(building).forEach(field => {
-                const value = building[field];
-                if (value && value !== '' && (!consolidated[field] || consolidated[field] === '')) {
-                    consolidated[field] = value;
-                }
-            });
-        }
-        
-        return consolidated;
-    },
-    
-    // 같은 빌딩명의 다른 출처 공실 정보 찾기
-    findRelatedVacancyInfo(buildingName, vacancyMap) {
-        let relatedInfo = null;
-        
-        vacancyMap.forEach((vacancies, key) => {
-            const [name] = key.split('_');
-            if (name === buildingName && vacancies.length > 0) {
-                // 가장 완전한 정보를 가진 공실 데이터 선택
-                const bestVacancy = vacancies.reduce((best, current) => {
-                    const bestFieldCount = Object.values(best).filter(v => v && v !== '').length;
-                    const currentFieldCount = Object.values(current).filter(v => v && v !== '').length;
-                    return currentFieldCount > bestFieldCount ? current : best;
-                });
-                
-                if (!relatedInfo || Object.values(bestVacancy).filter(v => v && v !== '').length > 
-                    Object.values(relatedInfo).filter(v => v && v !== '').length) {
-                    relatedInfo = bestVacancy;
-                }
-            }
-        });
-        
-        return relatedInfo;
-    },
-    
-    // 빈 필드 양방향 보완
-    fillMissingFields(merged, buildingInfo, vacancyInfo) {
-        const fieldsToFill = ['주소', '인근역', '연락처', '엘리베이터', '주차대수', '빌딩규모', '연면적'];
-        
-        fieldsToFill.forEach(field => {
-            if (!merged[field] || merged[field] === '') {
-                // 먼저 빌딩 정보에서 찾기
-                if (buildingInfo && buildingInfo[field] && buildingInfo[field] !== '') {
-                    merged[field] = buildingInfo[field];
-                }
-                // 없으면 공실 정보에서 찾기
-                else if (vacancyInfo && vacancyInfo[field] && vacancyInfo[field] !== '') {
-                    merged[field] = vacancyInfo[field];
-                }
-            }
-        });
     },
     
     // 샘플 빌딩 데이터 생성
@@ -470,10 +354,6 @@ const DataManager = {
                 results = results.filter(item => {
                     // 여러 필드명 체크
                     const areaStr = item['공실전용면적(평)'] || item['공실임대면적(평)'] || item['전용면적'] || '';
-                    
-                    // 면적이 '-' 인 경우 제외 (공실 정보 없음)
-                    if (areaStr === '-' || areaStr === '') return false;
-                    
                     // '@' 기호 제거 및 숫자 추출
                     const area = parseFloat(areaStr.toString().replace('@', '').replace(/,/g, ''));
                     
