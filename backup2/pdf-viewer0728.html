@@ -463,7 +463,7 @@
             <!-- 자동 검색 표시 -->
             <div class="auto-search-indicator" id="autoSearchIndicator">
                 <i class="bi bi-search"></i> 
-                <span>빌딩 검색 중...</span>
+                <span>종합 검색 중...</span>
             </div>
             
             <!-- 매칭 정보 표시 -->
@@ -499,476 +499,6 @@
     
     <!-- PDF 뷰어 스크립트 -->
     <script>
-    // 개선된 PDF 검색 클래스
-    class ImprovedPDFSearch {
-        constructor(pdfDoc) {
-            this.pdfDoc = pdfDoc;
-            // 빌딩명 패턴 정의
-            this.buildingPatterns = [
-                /([가-힣A-Za-z0-9\s]+)(?:빌딩|Building|BUILDING)/gi,
-                /([가-힣A-Za-z0-9\s]+)(?:타워|Tower|TOWER)/gi,
-                /([가-힣A-Za-z0-9\s]+)(?:센터|Center|CENTER)/gi,
-                /([가-힣A-Za-z0-9\s]+)(?:프라자|Plaza|PLAZA)/gi,
-                /([가-힣A-Za-z0-9\s]+)(?:하우스|House|HOUSE)/gi,
-                /([가-힣A-Za-z0-9\s]+)(?:오피스|Office|OFFICE)/gi,
-                /([가-힣A-Za-z0-9\s]+)(?:스퀘어|Square|SQUARE)/gi
-            ];
-        }
-        
-        // 메인 검색 함수
-        async searchBuilding(searchText, areaInfo = {}) {
-            console.log(`빌딩 검색 시작: "${searchText}"`, areaInfo);
-            
-            const results = [];
-            
-            // 1단계: 모든 페이지에서 빌딩명 추출 및 매칭
-            for (let i = 1; i <= this.pdfDoc.numPages; i++) {
-                const pageResult = await this.analyzePageForBuilding(i, searchText, areaInfo);
-                if (pageResult.score > 0) {
-                    results.push(pageResult);
-                }
-            }
-            
-            // 2단계: 결과 정렬 (점수 높은 순)
-            results.sort((a, b) => b.score - a.score);
-            
-            // 3단계: 최적 페이지 선택
-            if (results.length > 0) {
-                console.log('검색 결과 상위 5개:', results.slice(0, 5));
-                return results[0];
-            }
-            
-            return null;
-        }
-        
-        // 페이지별 분석
-        async analyzePageForBuilding(pageNum, searchText, areaInfo) {
-            const page = await this.pdfDoc.getPage(pageNum);
-            const textContent = await page.getTextContent();
-            
-            // 텍스트 아이템을 위치별로 그룹화
-            const textGroups = this.groupTextByPosition(textContent.items);
-            
-            // 빌딩명 후보 추출
-            const buildingCandidates = this.extractBuildingNames(textGroups, searchText);
-            
-            // 점수 계산
-            let maxScore = 0;
-            let bestMatch = null;
-            
-            for (const candidate of buildingCandidates) {
-                const score = this.calculateBuildingScore(candidate, searchText, textGroups, areaInfo);
-                if (score > maxScore) {
-                    maxScore = score;
-                    bestMatch = candidate;
-                }
-            }
-            
-            return {
-                pageNum,
-                score: maxScore,
-                match: bestMatch,
-                details: this.getPageDetails(textGroups, areaInfo)
-            };
-        }
-        
-        // 텍스트를 위치별로 그룹화
-        groupTextByPosition(items) {
-            const groups = [];
-            const threshold = 5; // 같은 라인으로 간주할 Y축 차이
-            
-            items.forEach(item => {
-                // 비어있는 텍스트 제외
-                if (!item.str.trim()) return;
-                
-                // 같은 라인의 그룹 찾기
-                let foundGroup = false;
-                for (const group of groups) {
-                    if (Math.abs(group.y - item.transform[5]) < threshold) {
-                        group.items.push(item);
-                        foundGroup = true;
-                        break;
-                    }
-                }
-                
-                // 새 그룹 생성
-                if (!foundGroup) {
-                    groups.push({
-                        y: item.transform[5],
-                        items: [item],
-                        text: ''
-                    });
-                }
-            });
-            
-            // 각 그룹의 텍스트 조합
-            groups.forEach(group => {
-                group.items.sort((a, b) => a.transform[4] - b.transform[4]); // X축 정렬
-                group.text = group.items.map(item => item.str).join(' ').trim();
-            });
-            
-            // Y축 위치로 정렬 (위에서 아래로)
-            groups.sort((a, b) => b.y - a.y);
-            
-            return groups;
-        }
-        
-        // 빌딩명 후보 추출
-        extractBuildingNames(textGroups, searchText) {
-            const candidates = new Set();
-            
-            for (const group of textGroups) {
-                const text = group.text;
-                
-                // 패턴 매칭으로 빌딩명 추출
-                for (const pattern of this.buildingPatterns) {
-                    const matches = text.matchAll(pattern);
-                    for (const match of matches) {
-                        const buildingName = match[0].trim();
-                        if (buildingName.length > 2) { // 너무 짧은 이름 제외
-                            candidates.add({
-                                name: buildingName,
-                                normalizedName: this.normalizeText(buildingName),
-                                position: group.y,
-                                fullLine: text
-                            });
-                        }
-                    }
-                }
-                
-                // 특수 케이스: 검색어가 포함된 경우
-                const searchNorm = this.normalizeText(searchText);
-                const textNorm = this.normalizeText(text);
-                
-                if (textNorm.includes(searchNorm)) {
-                    // 검색어 주변의 빌딩명 찾기
-                    const possibleNames = this.extractNearbyBuildingName(text, searchText);
-                    possibleNames.forEach(name => {
-                        candidates.add({
-                            name: name,
-                            normalizedName: this.normalizeText(name),
-                            position: group.y,
-                            fullLine: text
-                        });
-                    });
-                }
-            }
-            
-            return Array.from(candidates);
-        }
-        
-        // 검색어 주변의 빌딩명 추출
-        extractNearbyBuildingName(text, searchText) {
-            const names = [];
-            const buildingSuffixes = ['빌딩', '타워', '센터', '프라자', '하우스', '오피스', '스퀘어'];
-            
-            // 검색어 위치 찾기
-            const searchIndex = text.toLowerCase().indexOf(searchText.toLowerCase());
-            if (searchIndex === -1) return names;
-            
-            // 검색어 앞뒤로 빌딩명 찾기
-            for (const suffix of buildingSuffixes) {
-                const suffixIndex = text.indexOf(suffix, searchIndex);
-                if (suffixIndex !== -1 && suffixIndex - searchIndex < 20) {
-                    // 시작 위치 찾기
-                    let start = searchIndex;
-                    while (start > 0 && text[start - 1] !== ' ' && start > searchIndex - 20) {
-                        start--;
-                    }
-                    
-                    const buildingName = text.substring(start, suffixIndex + suffix.length).trim();
-                    if (buildingName.length > 2 && buildingName.length < 30) {
-                        names.push(buildingName);
-                    }
-                }
-            }
-            
-            return names;
-        }
-        
-        // 빌딩명 점수 계산
-        calculateBuildingScore(candidate, searchText, textGroups, areaInfo) {
-            let score = 0;
-            
-            const searchNorm = this.normalizeText(searchText);
-            const candidateNorm = candidate.normalizedName;
-            
-            // 1. 정확도 점수 (0-100점)
-            const accuracy = this.calculateAccuracy(searchNorm, candidateNorm);
-            score += accuracy * 100;
-            
-            // 2. 위치 점수 (상단에 있을수록 높은 점수, 0-20점)
-            const positionScore = candidate.position > 500 ? 20 : 
-                                candidate.position > 300 ? 15 : 
-                                candidate.position > 100 ? 10 : 5;
-            score += positionScore;
-            
-            // 3. 문맥 점수 (주변에 관련 키워드가 있는지, 0-30점)
-            const contextScore = this.calculateContextScore(candidate, textGroups);
-            score += contextScore;
-            
-            // 4. 면적 매칭 점수 (0-50점)
-            if (areaInfo.exclusive || areaInfo.rent) {
-                const areaScore = this.calculateAreaScore(textGroups, areaInfo);
-                score += areaScore;
-            }
-            
-            return score;
-        }
-        
-        // 정확도 계산 (개선된 알고리즘)
-        calculateAccuracy(search, candidate) {
-            // 완전 일치
-            if (search === candidate) return 1.0;
-            
-            // 포함 관계
-            if (candidate.includes(search) || search.includes(candidate)) {
-                const ratio = Math.min(search.length, candidate.length) / 
-                             Math.max(search.length, candidate.length);
-                return 0.8 + (ratio * 0.2);
-            }
-            
-            // 자모 분리 비교 (한글)
-            if (this.isKorean(search)) {
-                const searchJamo = this.decomposeHangul(search);
-                const candidateJamo = this.decomposeHangul(candidate);
-                
-                if (candidateJamo.includes(searchJamo)) {
-                    return 0.7;
-                }
-                
-                // 자모 유사도
-                const jamoSimilarity = this.calculateJamoSimilarity(searchJamo, candidateJamo);
-                if (jamoSimilarity > 0.7) {
-                    return jamoSimilarity * 0.8;
-                }
-            }
-            
-            // 편집 거리 기반 유사도
-            const distance = this.levenshteinDistance(search, candidate);
-            const maxLen = Math.max(search.length, candidate.length);
-            const similarity = 1 - (distance / maxLen);
-            
-            return similarity > 0.5 ? similarity * 0.6 : 0;
-        }
-        
-        // 자모 유사도 계산
-        calculateJamoSimilarity(jamo1, jamo2) {
-            const len1 = jamo1.length;
-            const len2 = jamo2.length;
-            
-            if (len1 === 0 || len2 === 0) return 0;
-            
-            let matches = 0;
-            const minLen = Math.min(len1, len2);
-            
-            for (let i = 0; i < minLen; i++) {
-                if (jamo1[i] === jamo2[i]) matches++;
-            }
-            
-            return matches / Math.max(len1, len2);
-        }
-        
-        // 문맥 점수 계산
-        calculateContextScore(candidate, textGroups) {
-            let score = 0;
-            const contextKeywords = [
-                '오피스', 'OFFICE', 'Office',
-                '임대', '분양', 'LEASE', 'Lease',
-                '층', 'F', 'Floor', 'FLOOR',
-                '호', '호실', 'Unit', 'UNIT',
-                '평', '㎡', 'm²', 'm2',
-                '전용', '임대면적', '계약면적'
-            ];
-            
-            // 같은 라인 체크
-            const sameLine = candidate.fullLine.toLowerCase();
-            for (const keyword of contextKeywords) {
-                if (sameLine.includes(keyword.toLowerCase())) {
-                    score += 5;
-                }
-            }
-            
-            // 인접 라인 체크 (위아래 2줄)
-            const candidateIndex = textGroups.findIndex(g => g.y === candidate.position);
-            for (let i = Math.max(0, candidateIndex - 2); 
-                 i <= Math.min(textGroups.length - 1, candidateIndex + 2); i++) {
-                if (i === candidateIndex) continue;
-                
-                const nearText = textGroups[i].text.toLowerCase();
-                for (const keyword of contextKeywords) {
-                    if (nearText.includes(keyword.toLowerCase())) {
-                        score += 2;
-                    }
-                }
-            }
-            
-            return Math.min(score, 30);
-        }
-        
-        // 면적 점수 계산
-        calculateAreaScore(textGroups, areaInfo) {
-            let score = 0;
-            
-            const allText = textGroups.map(g => g.text).join(' ');
-            
-            // 전용면적 체크
-            if (areaInfo.exclusive) {
-                const exclusiveFound = this.findAreaInText(allText, areaInfo.exclusive, '전용');
-                if (exclusiveFound) score += 30;
-            }
-            
-            // 임대면적 체크
-            if (areaInfo.rent) {
-                const rentFound = this.findAreaInText(allText, areaInfo.rent, '임대');
-                if (rentFound) score += 20;
-            }
-            
-            return score;
-        }
-        
-        // 면적 찾기
-        findAreaInText(text, targetArea, type) {
-            const target = parseFloat(targetArea);
-            const tolerance = target * 0.02; // 2% 오차 허용
-            
-            // 면적 패턴
-            const patterns = [
-                new RegExp(`${type}[^0-9]{0,10}([0-9]+\\.?[0-9]*)\\s*평`, 'gi'),
-                new RegExp(`${type}[^0-9]{0,10}([0-9]+\\.?[0-9]*)\\s*㎡`, 'gi'),
-                new RegExp(`([0-9]+\\.?[0-9]*)\\s*평[^0-9]{0,10}${type}`, 'gi'),
-                new RegExp(`([0-9]+\\.?[0-9]*)\\s*㎡[^0-9]{0,10}${type}`, 'gi')
-            ];
-            
-            for (const pattern of patterns) {
-                const matches = text.matchAll(pattern);
-                for (const match of matches) {
-                    const value = parseFloat(match[1]);
-                    if (Math.abs(value - target) <= tolerance) {
-                        return true;
-                    }
-                }
-            }
-            
-            // 단순 숫자 매칭
-            const numberPattern = /([0-9]+\.?[0-9]*)/g;
-            const numbers = text.matchAll(numberPattern);
-            for (const match of numbers) {
-                const value = parseFloat(match[1]);
-                if (Math.abs(value - target) <= tolerance) {
-                    return true;
-                }
-            }
-            
-            return false;
-        }
-        
-        // 텍스트 정규화
-        normalizeText(text) {
-            return text
-                .toLowerCase()
-                .replace(/\s+/g, '')
-                .replace(/[()（）\[\]【】]/g, '')
-                .replace(/[.,;:!?]/g, '')
-                .replace(/building|tower|center|plaza|office|house|square/gi, '')
-                .replace(/빌딩|타워|센터|프라자|오피스|하우스|스퀘어/g, '');
-        }
-        
-        // 한글 여부 확인
-        isKorean(text) {
-            return /[가-힣]/.test(text);
-        }
-        
-        // 한글 자모 분리
-        decomposeHangul(text) {
-            const CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
-            const JUNG = ['ㅏ','ㅐ','ㅑ','ㅒ','ㅓ','ㅔ','ㅕ','ㅖ','ㅗ','ㅘ','ㅙ','ㅚ','ㅛ','ㅜ','ㅝ','ㅞ','ㅟ','ㅠ','ㅡ','ㅢ','ㅣ'];
-            const JONG = ['','ㄱ','ㄲ','ㄳ','ㄴ','ㄵ','ㄶ','ㄷ','ㄹ','ㄺ','ㄻ','ㄼ','ㄽ','ㄾ','ㄿ','ㅀ','ㅁ','ㅂ','ㅄ','ㅅ','ㅆ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
-            
-            let result = '';
-            for (const char of text) {
-                const code = char.charCodeAt(0);
-                if (code >= 0xAC00 && code <= 0xD7A3) {
-                    const baseCode = code - 0xAC00;
-                    const cho = Math.floor(baseCode / 588);
-                    const jung = Math.floor((baseCode % 588) / 28);
-                    const jong = baseCode % 28;
-                    
-                    result += CHO[cho] + JUNG[jung];
-                    if (jong > 0) result += JONG[jong];
-                } else {
-                    result += char;
-                }
-            }
-            return result;
-        }
-        
-        // 레벤슈타인 거리
-        levenshteinDistance(str1, str2) {
-            const matrix = [];
-            
-            for (let i = 0; i <= str2.length; i++) {
-                matrix[i] = [i];
-            }
-            
-            for (let j = 0; j <= str1.length; j++) {
-                matrix[0][j] = j;
-            }
-            
-            for (let i = 1; i <= str2.length; i++) {
-                for (let j = 1; j <= str1.length; j++) {
-                    if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-                        matrix[i][j] = matrix[i - 1][j - 1];
-                    } else {
-                        matrix[i][j] = Math.min(
-                            matrix[i - 1][j - 1] + 1,
-                            matrix[i][j - 1] + 1,
-                            matrix[i - 1][j] + 1
-                        );
-                    }
-                }
-            }
-            
-            return matrix[str2.length][str1.length];
-        }
-        
-        // 페이지 상세 정보 추출
-        getPageDetails(textGroups, areaInfo) {
-            const details = {
-                buildingNames: [],
-                areas: [],
-                floors: []
-            };
-            
-            const allText = textGroups.map(g => g.text).join(' ');
-            
-            // 빌딩명
-            for (const pattern of this.buildingPatterns) {
-                const matches = allText.matchAll(pattern);
-                for (const match of matches) {
-                    details.buildingNames.push(match[0]);
-                }
-            }
-            
-            // 면적
-            const areaPattern = /([0-9]+\.?[0-9]*)\s*(평|㎡|m²)/g;
-            const areaMatches = allText.matchAll(areaPattern);
-            for (const match of areaMatches) {
-                details.areas.push(match[0]);
-            }
-            
-            // 층
-            const floorPattern = /([0-9]+)\s*층|([0-9]+)F\b/g;
-            const floorMatches = allText.matchAll(floorPattern);
-            for (const match of floorMatches) {
-                details.floors.push(match[0]);
-            }
-            
-            return details;
-        }
-    }
-    
-    // 메인 PDF 뷰어 클래스
     class SimplePDFViewer {
         constructor() {
             this.pdfDoc = null;
@@ -1012,12 +542,12 @@
             if (this.fileName) {
                 await this.loadPDF(this.fileName);
                 
-                // 개선된 검색 시작
-                this.log('개선된 빌딩 검색 시작');
+                // 종합적인 검색 시작
+                this.log('종합 검색 시작');
                 this.isAutoSearching = true;
                 document.getElementById('autoSearchIndicator').classList.add('active');
                 
-                const found = await this.improvedComprehensiveSearch();
+                const found = await this.comprehensiveSearch();
                 
                 this.isAutoSearching = false;
                 document.getElementById('autoSearchIndicator').classList.remove('active');
@@ -1171,38 +701,309 @@
             return info;
         }
         
-        // 개선된 종합 검색
-        async improvedComprehensiveSearch() {
-            const searcher = new ImprovedPDFSearch(this.pdfDoc);
-            
-            const result = await searcher.searchBuilding(this.searchText, {
-                exclusive: this.exclusiveArea,
-                rent: this.rentArea
+        // 종합적인 검색
+        async comprehensiveSearch() {
+            this.log('=== 종합 검색 시작 ===');
+            this.log('검색 대상:', {
+                빌딩명: this.searchText,
+                전용면적: this.exclusiveArea,
+                임대면적: this.rentArea,
+                대체검색어: this.fallbackSearches
             });
             
-            if (result) {
-                this.log(`최적 매칭: ${result.match ? result.match.name : '알 수 없음'} (${result.pageNum}페이지, 점수: ${result.score})`);
-                this.showMatchInfo(`빌딩명 매칭: ${result.match ? result.match.name : ''}`, result);
-                await this.renderPage(result.pageNum);
-                this.updateActivePageItem(result.pageNum);
+            const pageScores = [];
+            
+            // 모든 페이지 분석
+            for (let i = 1; i <= this.pdfDoc.numPages; i++) {
+                try {
+                    const page = await this.pdfDoc.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const items = textContent.items;
+                    const fullText = items.map(item => item.str).join(' ');
+                    
+                    // 페이지 점수 계산
+                    const score = await this.calculatePageScore(i, fullText, items);
+                    pageScores.push({
+                        pageNum: i,
+                        score: score.total,
+                        details: score.details,
+                        matches: score.matches
+                    });
+                    
+                    if (score.total > 0) {
+                        this.log(`${i}페이지 점수: ${score.total}`, score.matches);
+                    }
+                    
+                } catch (error) {
+                    this.log(`${i}페이지 분석 오류:`, error);
+                }
+            }
+            
+            // 점수순으로 정렬
+            pageScores.sort((a, b) => b.score - a.score);
+            
+            // 최고 점수 페이지 선택
+            if (pageScores.length > 0 && pageScores[0].score > 0) {
+                const bestPage = pageScores[0];
+                this.log(`최적 페이지 선택: ${bestPage.pageNum}페이지 (점수: ${bestPage.score})`);
+                this.showMatchInfo(`종합 매칭 (점수: ${bestPage.score})`, bestPage);
+                
+                await this.renderPage(bestPage.pageNum);
+                this.updateActivePageItem(bestPage.pageNum);
                 return true;
             }
             
-            // 검색 실패 시 fallback 검색
-            if (this.fallbackSearches.length > 0) {
-                this.log('Fallback 검색 시작');
-                for (const fallback of this.fallbackSearches) {
-                    const fallbackResult = await searcher.searchBuilding(fallback, {
-                        exclusive: this.exclusiveArea,
-                        rent: this.rentArea
-                    });
+            this.log('적합한 페이지를 찾을 수 없습니다.');
+            return false;
+        }
+        
+        // 페이지 점수 계산
+        async calculatePageScore(pageNum, fullText, items) {
+            const score = {
+                total: 0,
+                details: {},
+                matches: []
+            };
+            
+            // 1. 빌딩명 매칭 (가장 높은 가중치)
+            if (this.searchText) {
+                const buildingScore = this.calculateTextSimilarity(this.searchText, fullText);
+                score.details.building = buildingScore;
+                score.total += buildingScore * 100; // 빌딩명은 100점 만점
+                
+                if (buildingScore > 0.5) {
+                    score.matches.push(`빌딩명 매칭 (${Math.round(buildingScore * 100)}%)`);
+                }
+            }
+            
+            // 2. 주소/대체 검색어 매칭
+            let maxFallbackScore = 0;
+            for (const fallback of this.fallbackSearches) {
+                const fallbackScore = this.calculateTextSimilarity(fallback, fullText);
+                maxFallbackScore = Math.max(maxFallbackScore, fallbackScore);
+                
+                if (fallbackScore > 0.5) {
+                    score.matches.push(`${fallback} 매칭 (${Math.round(fallbackScore * 100)}%)`);
+                }
+            }
+            score.details.fallback = maxFallbackScore;
+            score.total += maxFallbackScore * 50; // 주소는 50점 만점
+            
+            // 3. 면적 매칭
+            const areaMatches = await this.findAreasInPage(fullText, items);
+            
+            if (this.exclusiveArea && areaMatches.exclusive) {
+                score.details.exclusiveArea = 1;
+                score.total += 30; // 전용면적은 30점
+                score.matches.push(`전용면적 ${this.exclusiveArea}평 발견`);
+            }
+            
+            if (this.rentArea && areaMatches.rent) {
+                score.details.rentArea = 1;
+                score.total += 20; // 임대면적은 20점
+                score.matches.push(`임대면적 ${this.rentArea}평 발견`);
+            }
+            
+            // 4. 키워드 보너스 점수
+            const keywords = ['office', 'Office', '오피스', '사무실', '임대', '층', '평'];
+            let keywordCount = 0;
+            for (const keyword of keywords) {
+                if (fullText.includes(keyword)) keywordCount++;
+            }
+            score.details.keywords = keywordCount;
+            score.total += keywordCount * 5; // 키워드당 5점
+            
+            return score;
+        }
+        
+        // 텍스트 유사도 계산 (개선된 버전)
+        calculateTextSimilarity(searchText, pageText) {
+            if (!searchText || !pageText) return 0;
+            
+            // 정규화
+            const normalizeText = (text) => {
+                return text
+                    .toLowerCase()
+                    .replace(/[\s\-_()]/g, '')
+                    .replace(/[.,!?;:]/g, '')
+                    .replace(/빌딩|타워|센터|building|tower|center/gi, '')
+                    .trim();
+            };
+            
+            const searchNorm = normalizeText(searchText);
+            const pageNorm = normalizeText(pageText);
+            
+            // 1. 완전 일치
+            if (pageNorm.includes(searchNorm)) {
+                return 1.0;
+            }
+            
+            // 2. 부분 일치 (글자 단위)
+            let matchCount = 0;
+            const searchChars = searchNorm.split('');
+            const uniqueChars = [...new Set(searchChars)];
+            
+            for (const char of uniqueChars) {
+                if (pageNorm.includes(char)) {
+                    matchCount++;
+                }
+            }
+            
+            const charScore = matchCount / uniqueChars.length;
+            
+            // 3. 연속 문자 매칭
+            let maxConsecutive = 0;
+            let currentConsecutive = 0;
+            let searchIndex = 0;
+            
+            for (let i = 0; i < pageNorm.length && searchIndex < searchNorm.length; i++) {
+                if (pageNorm[i] === searchNorm[searchIndex]) {
+                    currentConsecutive++;
+                    searchIndex++;
+                    maxConsecutive = Math.max(maxConsecutive, currentConsecutive);
+                } else {
+                    currentConsecutive = 0;
+                }
+            }
+            
+            const consecutiveScore = maxConsecutive / searchNorm.length;
+            
+            // 4. 토큰 기반 매칭
+            const searchTokens = this.tokenize(searchText);
+            const pageTokens = this.tokenize(pageText);
+            
+            let tokenMatchCount = 0;
+            for (const searchToken of searchTokens) {
+                for (const pageToken of pageTokens) {
+                    if (this.isSimilarToken(searchToken, pageToken)) {
+                        tokenMatchCount++;
+                        break;
+                    }
+                }
+            }
+            
+            const tokenScore = searchTokens.length > 0 ? tokenMatchCount / searchTokens.length : 0;
+            
+            // 종합 점수 (가중 평균)
+            return Math.max(
+                charScore * 0.3 + consecutiveScore * 0.4 + tokenScore * 0.3,
+                charScore,
+                consecutiveScore,
+                tokenScore
+            );
+        }
+        
+        // 토큰화
+        tokenize(text) {
+            return text.match(/[가-힣]+|[A-Za-z]+|\d+/g) || [];
+        }
+        
+        // 토큰 유사도 확인
+        isSimilarToken(token1, token2) {
+            const t1 = token1.toLowerCase();
+            const t2 = token2.toLowerCase();
+            
+            // 완전 일치
+            if (t1 === t2) return true;
+            
+            // 부분 일치 (3글자 이상)
+            if (t1.length >= 3 && t2.length >= 3) {
+                if (t1.includes(t2) || t2.includes(t1)) return true;
+            }
+            
+            // 편집 거리가 1 이하
+            if (Math.abs(t1.length - t2.length) <= 1) {
+                const distance = this.levenshteinDistance(t1, t2);
+                if (distance <= 1) return true;
+            }
+            
+            return false;
+        }
+        
+        // 레벤슈타인 거리
+        levenshteinDistance(str1, str2) {
+            const matrix = [];
+            
+            for (let i = 0; i <= str2.length; i++) {
+                matrix[i] = [i];
+            }
+            
+            for (let j = 0; j <= str1.length; j++) {
+                matrix[0][j] = j;
+            }
+            
+            for (let i = 1; i <= str2.length; i++) {
+                for (let j = 1; j <= str1.length; j++) {
+                    if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                        matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                        matrix[i][j] = Math.min(
+                            matrix[i - 1][j - 1] + 1,
+                            matrix[i][j - 1] + 1,
+                            matrix[i - 1][j] + 1
+                        );
+                    }
+                }
+            }
+            
+            return matrix[str2.length][str1.length];
+        }
+        
+        // 페이지에서 면적 찾기
+        async findAreasInPage(fullText, items) {
+            const result = {
+                exclusive: false,
+                rent: false
+            };
+            
+            // 전용면적 찾기
+            if (this.exclusiveArea) {
+                result.exclusive = this.findAreaValue(this.exclusiveArea, fullText, items);
+            }
+            
+            // 임대면적 찾기
+            if (this.rentArea) {
+                result.rent = this.findAreaValue(this.rentArea, fullText, items);
+            }
+            
+            return result;
+        }
+        
+        // 특정 면적값 찾기
+        findAreaValue(searchArea, fullText, items) {
+            const searchValue = parseFloat(searchArea);
+            if (isNaN(searchValue)) return false;
+            
+            // 허용 오차 (2% 또는 1 중 큰 값)
+            const tolerance = Math.max(searchValue * 0.02, 1);
+            
+            // 1. 전체 텍스트에서 찾기
+            const numberPattern = /\d+(?:[.,]\d+)?/g;
+            const matches = fullText.match(numberPattern) || [];
+            
+            for (const match of matches) {
+                const value = parseFloat(match.replace(',', '.'));
+                if (!isNaN(value) && Math.abs(value - searchValue) <= tolerance) {
+                    this.log(`면적 매칭: ${match} ≈ ${searchValue}`);
+                    return true;
+                }
+            }
+            
+            // 2. 연속된 아이템 조합으로 찾기
+            for (let i = 0; i < items.length - 2; i++) {
+                // 최대 5개 아이템 조합
+                for (let j = 1; j <= Math.min(5, items.length - i); j++) {
+                    const combined = items.slice(i, i + j)
+                        .map(item => item.str)
+                        .join('');
                     
-                    if (fallbackResult && fallbackResult.score > 50) {
-                        this.log(`Fallback 매칭: ${fallback} (${fallbackResult.pageNum}페이지)`);
-                        this.showMatchInfo(`주소 매칭: ${fallback}`, fallbackResult);
-                        await this.renderPage(fallbackResult.pageNum);
-                        this.updateActivePageItem(fallbackResult.pageNum);
-                        return true;
+                    const cleanCombined = combined.replace(/[^\d.,]/g, '');
+                    if (cleanCombined) {
+                        const value = parseFloat(cleanCombined.replace(',', '.'));
+                        if (!isNaN(value) && Math.abs(value - searchValue) <= tolerance) {
+                            this.log(`조합 면적 매칭: ${combined} → ${value} ≈ ${searchValue}`);
+                            return true;
+                        }
                     }
                 }
             }
@@ -1213,22 +1014,8 @@
         // 매칭 정보 표시
         showMatchInfo(matchType, pageMatch) {
             const info = document.getElementById('matchInfo');
-            let details = matchType;
-            
-            if (pageMatch && pageMatch.details) {
-                const detailParts = [];
-                if (pageMatch.details.floors.length > 0) {
-                    detailParts.push(`층: ${pageMatch.details.floors[0]}`);
-                }
-                if (pageMatch.details.areas.length > 0) {
-                    detailParts.push(`면적: ${pageMatch.details.areas[0]}`);
-                }
-                if (detailParts.length > 0) {
-                    details += `<br>${detailParts.join(', ')}`;
-                }
-            }
-            
-            info.innerHTML = details;
+            const details = pageMatch.matches ? pageMatch.matches.join(', ') : '';
+            info.innerHTML = `${matchType}<br>${details}`;
             info.classList.add('show');
             
             setTimeout(() => {
@@ -1272,21 +1059,15 @@
             this.log('수동 검색 시작:', searchText);
             this.showLoading(true);
             
-            // 개선된 검색 사용
-            const searcher = new ImprovedPDFSearch(this.pdfDoc);
-            const result = await searcher.searchBuilding(searchText, {
-                exclusive: this.exclusiveArea,
-                rent: this.rentArea
-            });
+            // 검색어를 설정하고 종합 검색 실행
+            this.searchText = searchText;
+            this.fallbackSearches = [searchText];
+            
+            const found = await this.comprehensiveSearch();
             
             this.showLoading(false);
             
-            if (result && result.score > 30) { // 최소 점수 기준
-                this.log(`수동 검색 결과: ${result.match ? result.match.name : searchText} (${result.pageNum}페이지)`);
-                this.showMatchInfo(`검색 결과: ${searchText}`, result);
-                await this.renderPage(result.pageNum);
-                this.updateActivePageItem(result.pageNum);
-            } else {
+            if (!found) {
                 alert(`"${searchText}"과(와) 관련된 페이지를 찾을 수 없습니다.`);
             }
         }
