@@ -519,8 +519,8 @@
             this.rentArea = params.get('rent') || '';
             this.searchArea = params.get('area') || this.exclusiveArea || this.rentArea || '';
             
-            // 빌딩명과 fallback 검색어들
-            this.searchText = decodeURIComponent(params.get('search') || '');
+            // 빌딩명과 fallback 검색어들 - URL 디코딩 필수!
+            this.searchText = params.get('search') ? decodeURIComponent(params.get('search')) : '';
             this.fallbackSearches = params.get('fallback') ? 
                 decodeURIComponent(params.get('fallback')).split('|') : [];
             
@@ -730,7 +730,9 @@
                         matches: score.matches
                     });
                     
-                    this.log(`${i}페이지 점수: ${score.total}`, score.details);
+                    if (score.total > 0) {
+                        this.log(`${i}페이지 점수: ${score.total}`, score.matches);
+                    }
                     
                 } catch (error) {
                     this.log(`${i}페이지 분석 오류:`, error);
