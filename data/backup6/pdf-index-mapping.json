@@ -1,9 +1,10 @@
 {
   "version": "1.0",
-  "created": "2025-07-28T09:10:55.986Z",
-  "totalMappings": 18,
+  "created": "2025-07-28T08:01:06.089Z",
+  "totalMappings": 20,
   "pdfs": [
     {
+      "fileName": "RS.pdf",
       "companies": {
         "RS": {
           "indexPages": [
@@ -154,6 +155,16 @@
       }
     },
     {
+      "fileName": "ERA.pdf",
+      "companies": {
+        "ERA": {
+          "indexPages": [
+            3
+          ]
+        }
+      }
+    },
+    {
       "fileName": "KT.pdf",
       "companies": {
         "KT": {
@@ -224,24 +235,6 @@
             6,
             11,
             19
-          ]
-        }
-      }
-    },
-    {
-      "fileName": "SVS.pdf",
-      "companies": {
-        "SVS": {
-          "indexPages": [
-            42,
-            43,
-            124,
-            125,
-            126,
-            229,
-            249,
-            265,
-            323
           ]
         }
       }
