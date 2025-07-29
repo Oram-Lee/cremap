@@ -731,7 +731,6 @@
         constructor(pdfDoc, indexMapping) {
             this.pdfDoc = pdfDoc;
             this.indexMapping = indexMapping;
-            this.currentSearchText = ''; // 현재 검색어 저장
             this.buildingPatterns = [
                 /([가-힣A-Za-z0-9\s]+)(?:빌딩|Building|BUILDING)/gi,
                 /([가-힣A-Za-z0-9\s]+)(?:타워|Tower|TOWER)/gi,
@@ -780,7 +779,6 @@
         // 특정 페이지에서 빌딩 검색 및 링크 찾기
         async searchInPage(pageNum, searchText) {
             try {
-                this.currentSearchText = searchText; // 검색어 저장
                 const page = await this.pdfDoc.getPage(pageNum);
                 const textContent = await page.getTextContent();
                 
@@ -873,50 +871,18 @@
         // 페이지 참조 찾기
         findPageReference(textLines, matchIndex) {
             const matchLine = textLines[matchIndex];
-            const searchText = this.currentSearchText; // 검색어 저장
             
-            // 페이지 번호 패턴 (p. 16, p.16, 16 등 다양한 형식 지원)
-            const pageNumPattern = /(?:p\s*\.\s*)?(\d{1,3})\b/gi;
+            // 같은 라인에서 페이지 번호 찾기
+            const pageNumPattern = /\b(\d{1,3})\b/g;
+            const matches = matchLine.text.match(pageNumPattern);
             
-            // 같은 라인에서 검색어와 가장 가까운 페이지 번호 찾기
-            let bestPageNum = null;
-            let minDistance = Infinity;
-            
-            // 검색어의 위치 찾기
-            const searchIndex = matchLine.text.toLowerCase().indexOf(searchText.toLowerCase());
-            if (searchIndex === -1) {
-                // 검색어가 정확히 없으면 유사한 텍스트 찾기
-                for (let i = 0; i < matchLine.text.length - searchText.length; i++) {
-                    const substr = matchLine.text.substring(i, i + searchText.length);
-                    if (this.normalizeText(substr).includes(this.normalizeText(searchText))) {
-                        searchIndex = i;
-                        break;
-                    }
-                }
-            }
-            
-            // 모든 페이지 번호 찾기
-            let match;
-            while ((match = pageNumPattern.exec(matchLine.text)) !== null) {
-                const pageNum = parseInt(match[1]);
+            if (matches) {
+                // 가장 마지막 숫자를 페이지 번호로 간주
+                const pageNum = parseInt(matches[matches.length - 1]);
                 if (pageNum > 0 && pageNum <= this.pdfDoc.numPages) {
-                    // 검색어와 페이지 번호 사이의 거리 계산
-                    const pageNumIndex = match.index;
-                    const distance = Math.abs(pageNumIndex - (searchIndex + searchText.length));
-                    
-                    console.log(`페이지 번호 ${pageNum} 발견, 거리: ${distance}`);
-                    
-                    // 더 가까운 페이지 번호 발견
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        bestPageNum = pageNum;
-                    }
+                    console.log(`같은 라인에서 페이지 번호 발견: ${pageNum}`);
+                    return pageNum;
                 }
-            }
-            
-            if (bestPageNum) {
-                console.log(`같은 라인에서 가장 가까운 페이지 번호: ${bestPageNum}`);
-                return bestPageNum;
             }
             
             // 인근 라인에서 페이지 번호 찾기 (위아래 2줄)
@@ -924,10 +890,10 @@
                 if (i === matchIndex) continue;
                 
                 const nearLine = textLines[i];
-                pageNumPattern.lastIndex = 0; // 정규식 리셋
+                const nearMatches = nearLine.text.match(pageNumPattern);
                 
-                while ((match = pageNumPattern.exec(nearLine.text)) !== null) {
-                    const pageNum = parseInt(match[1]);
+                if (nearMatches) {
+                    const pageNum = parseInt(nearMatches[nearMatches.length - 1]);
                     if (pageNum > 0 && pageNum <= this.pdfDoc.numPages) {
                         console.log(`인근 라인에서 페이지 번호 발견: ${pageNum}`);
                         return pageNum;
@@ -1856,9 +1822,6 @@
                                 this.closeIndexPreview();
                                 this.goToPage(indexResult.pageNum);
                             } else {
-                                // 목차에서 페이지 번호를 못 찾은 경우
-                                console.log(`목차에서 "${buildingName}"의 페이지 번호를 찾을 수 없음. 전체 문서에서 검색 시작...`);
-                                
                                 // 전체 문서에서 검색
                                 const searcher = new ImprovedPDFSearch(this.pdfDoc);
                                 const result = await searcher.searchBuilding(buildingName);
@@ -1868,19 +1831,8 @@
                                 if (result && result.pageNum) {
                                     this.closeIndexPreview();
                                     this.goToPage(result.pageNum);
-                                    this.showMatchInfo(`검색 결과: ${buildingName}`, result);
                                 } else {
-                                    // 그래도 못 찾으면 순차적 검색
-                                    console.log('전체 검색에서도 못 찾음. 순차적 검색 시작...');
-                                    const sequentialResult = await this.sequentialSearch(buildingName, indexPageNum);
-                                    
-                                    if (sequentialResult) {
-                                        this.closeIndexPreview();
-                                        this.goToPage(sequentialResult.pageNum);
-                                        this.showMatchInfo(`순차 검색 결과: ${buildingName}`, sequentialResult);
-                                    } else {
-                                        alert(`"${buildingName}"을(를) 찾을 수 없습니다.`);
-                                    }
+                                    alert(`"${buildingName}"을(를) 찾을 수 없습니다.`);
                                 }
                             }
                         };
@@ -2272,97 +2224,8 @@
             this.renderPage(this.currentPage);
         }
         
-        // 순차적 검색 - 목차에 나열된 순서대로 검색
-        async sequentialSearch(buildingName, startFromPage) {
-            console.log(`순차적 검색 시작: "${buildingName}" (${startFromPage}페이지부터)`);
-            
-            try {
-                // 먼저 목차 페이지에서 빌딩 목록 순서 파악
-                const page = await this.pdfDoc.getPage(startFromPage);
-                const textContent = await page.getTextContent();
-                const textLines = this.groupTextByPosition(textContent.items);
-                
-                // 빌딩명들을 순서대로 추출
-                const buildingList = [];
-                let targetIndex = -1;
-                
-                for (let i = 0; i < textLines.length; i++) {
-                    const line = textLines[i];
-                    // 빌딩 패턴 매칭
-                    for (const pattern of this.buildingPatterns) {
-                        const matches = line.text.matchAll(pattern);
-                        for (const match of matches) {
-                            const name = match[0].trim();
-                            buildingList.push({
-                                name: name,
-                                normalized: this.normalizeText(name),
-                                lineIndex: i
-                            });
-                            
-                            // 찾고자 하는 빌딩인지 확인
-                            if (this.normalizeText(name).includes(this.normalizeText(buildingName)) ||
-                                this.normalizeText(buildingName).includes(this.normalizeText(name))) {
-                                targetIndex = buildingList.length - 1;
-                            }
-                        }
-                    }
-                }
-                
-                if (targetIndex === -1) {
-                    console.log('목차에서 빌딩을 찾을 수 없음');
-                    return null;
-                }
-                
-                console.log(`목차에서 ${targetIndex}번째 빌딩: "${buildingList[targetIndex].name}"`);
-                
-                // 목차 다음 페이지부터 검색 시작
-                const searchStartPage = Math.min(startFromPage + 1, this.pdfDoc.numPages);
-                
-                // 순차적으로 페이지 검색
-                for (let pageNum = searchStartPage; pageNum <= this.pdfDoc.numPages; pageNum++) {
-                    const pageText = await this.getPageText(pageNum);
-                    const pageTextNorm = this.normalizeText(pageText);
-                    
-                    // 현재 빌딩이 이 페이지에 있는지 확인
-                    if (pageTextNorm.includes(buildingList[targetIndex].normalized)) {
-                        console.log(`${pageNum}페이지에서 "${buildingList[targetIndex].name}" 발견!`);
-                        
-                        // 다음 빌딩이 이 페이지에 있는지 확인 (경계 확인)
-                        if (targetIndex < buildingList.length - 1) {
-                            const nextBuilding = buildingList[targetIndex + 1];
-                            if (pageTextNorm.includes(nextBuilding.normalized)) {
-                                // 다음 빌딩도 같은 페이지에 있으면 계속 검색
-                                continue;
-                            }
-                        }
-                        
-                        return {
-                            pageNum: pageNum,
-                            matchText: buildingList[targetIndex].name,
-                            score: 100
-                        };
-                    }
-                }
-                
-                console.log('순차적 검색에서도 찾을 수 없음');
-                return null;
-                
-            } catch (error) {
-                console.error('순차적 검색 중 오류:', error);
-                return null;
-            }
-        }
-        
-        // 페이지의 전체 텍스트 가져오기
-        async getPageText(pageNum) {
-            try {
-                const page = await this.pdfDoc.getPage(pageNum);
-                const textContent = await page.getTextContent();
-                return textContent.items.map(item => item.str).join(' ');
-            } catch (error) {
-                console.error(`페이지 ${pageNum} 텍스트 추출 실패:`, error);
-                return '';
-            }
+        showLoading(show) {
+            document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
         }
         
         showError(message) {
