@@ -412,12 +412,6 @@
             flex-direction: column;
         }
         
-        .index-pages-container {
-            flex: 1;
-            overflow-y: auto;
-            padding: 10px 0;
-        }
-        
         .index-pages-header {
             padding: 10px 16px;
             background: #fff3cd;
@@ -598,14 +592,14 @@
                 </div>
             </div>
             
-            <!-- 목차 페이지 섹션 -->
+            <!-- 목차 페이지 썸네일 섹션 -->
             <div class="index-pages-section" id="indexPagesSection" style="display: none;">
                 <div class="index-pages-header">
                     <i class="bi bi-bookmark-star"></i>
-                    목차 페이지
+                    목차 페이지 바로가기
                 </div>
-                <div class="index-pages-container" id="indexPagesContainer">
-                    <!-- 목차 페이지가 여기에 렌더링됩니다 -->
+                <div class="index-pages-grid" id="indexPagesGrid">
+                    <!-- 목차 페이지 썸네일이 여기에 추가됩니다 -->
                 </div>
             </div>
             
@@ -1549,272 +1543,57 @@
             }
         }
         
-        // 목차 페이지 렌더링 (클릭 가능한 버전)
+        // 목차 페이지 썸네일 생성
         async generateIndexPageThumbnails() {
             const section = document.getElementById('indexPagesSection');
-            const container = document.getElementById('indexPagesContainer');
+            const grid = document.getElementById('indexPagesGrid');
             
             // 섹션 표시
             section.style.display = 'block';
-            container.innerHTML = '';
+            grid.innerHTML = '';
             
-            // 각 목차 페이지 렌더링
+            // 각 목차 페이지에 대한 썸네일 생성
             for (const pageNum of this.indexPages) {
                 try {
                     const page = await this.pdfDoc.getPage(pageNum);
-                    const scale = 0.8; // 사이드바에 맞게 크기 조정
-                    const viewport = page.getViewport({ scale });
+                    const viewport = page.getViewport({ scale: 0.3 }); // 작은 썸네일
                     
-                    // 페이지 컨테이너
-                    const pageDiv = document.createElement('div');
-                    pageDiv.className = 'index-page-full';
-                    pageDiv.style.width = viewport.width + 'px';
-                    pageDiv.style.height = viewport.height + 'px';
-                    pageDiv.style.margin = '10px auto';
-                    pageDiv.style.position = 'relative';
-                    
-                    // 캔버스 생성
                     const canvas = document.createElement('canvas');
                     const context = canvas.getContext('2d');
                     
                     canvas.width = viewport.width;
                     canvas.height = viewport.height;
                     
-                    // PDF 페이지 렌더링
                     await page.render({
                         canvasContext: context,
                         viewport: viewport
                     }).promise;
                     
-                    pageDiv.appendChild(canvas);
-                    
-                    // 텍스트 레이어 생성 (클릭 가능)
-                    const textLayerDiv = document.createElement('div');
-                    textLayerDiv.className = 'textLayer';
-                    pageDiv.appendChild(textLayerDiv);
-                    
-                    // 1. PDF 내장 링크(Annotations) 처리
-                    const annotations = await page.getAnnotations();
-                    let hasLinks = false;
-                    
-                    for (const annotation of annotations) {
-                        if (annotation.subtype === 'Link' && annotation.dest) {
-                            hasLinks = true;
-                            const rect = annotation.rect;
-                            const linkDiv = document.createElement('div');
-                            linkDiv.style.position = 'absolute';
-                            linkDiv.style.left = (rect[0] * scale) + 'px';
-                            linkDiv.style.bottom = (rect[1] * scale) + 'px';
-                            linkDiv.style.width = ((rect[2] - rect[0]) * scale) + 'px';
-                            linkDiv.style.height = ((rect[3] - rect[1]) * scale) + 'px';
-                            linkDiv.style.cursor = 'pointer';
-                            linkDiv.style.backgroundColor = 'transparent';
-                            
-                            // 호버 효과
-                            linkDiv.onmouseover = () => {
-                                linkDiv.style.backgroundColor = 'rgba(0, 120, 255, 0.2)';
-                                linkDiv.style.border = '1px solid #0078ff';
-                            };
-                            linkDiv.onmouseout = () => {
-                                linkDiv.style.backgroundColor = 'transparent';
-                                linkDiv.style.border = 'none';
-                            };
-                            
-                            // 클릭 이벤트
-                            linkDiv.onclick = async () => {
-                                if (typeof annotation.dest === 'string') {
-                                    // Named destination
-                                    const dest = await this.pdfDoc.getDestination(annotation.dest);
-                                    if (dest) {
-                                        const pageIndex = await this.pdfDoc.getPageIndex(dest[0]);
-                                        this.goToPage(pageIndex + 1);
-                                    }
-                                } else if (Array.isArray(annotation.dest)) {
-                                    // Direct destination
-                                    const pageIndex = await this.pdfDoc.getPageIndex(annotation.dest[0]);
-                                    this.goToPage(pageIndex + 1);
-                                }
-                                
-                                // 모바일에서 사이드바 닫기
-                                if (window.innerWidth <= 768) {
-                                    document.getElementById('sidebar').classList.add('hidden');
-                                }
-                            };
-                            
-                            textLayerDiv.appendChild(linkDiv);
+                    // 썸네일 컨테이너 생성
+                    const thumbnailDiv = document.createElement('div');
+                    thumbnailDiv.className = 'index-page-thumbnail';
+                    thumbnailDiv.onclick = () => {
+                        this.goToPage(pageNum);
+                        // 사이드바 자동 닫기 (모바일)
+                        if (window.innerWidth <= 768) {
+                            document.getElementById('sidebar').classList.add('hidden');
                         }
-                    }
+                    };
                     
-                    // 2. 링크가 없으면 빌딩명 기반 클릭 영역 생성
-                    if (!hasLinks) {
-                        const textContent = await page.getTextContent();
-                        const textLines = this.groupTextByPosition(textContent.items);
-                        
-                        for (const line of textLines) {
-                            // 빌딩명 패턴 찾기
-                            const buildingMatch = line.text.match(/([가-힣A-Za-z0-9\s]+(?:빌딩|타워|센터|프라자|하우스|오피스|스퀘어|Building|Tower|Center|Plaza|House|Office|Square))/i);
-                            
-                            if (buildingMatch) {
-                                const buildingName = buildingMatch[1].trim();
-                                
-                                // 클릭 가능한 영역 생성
-                                const span = document.createElement('span');
-                                span.style.position = 'absolute';
-                                span.style.left = (line.items[0].transform[4] * scale) + 'px';
-                                span.style.bottom = (line.items[0].transform[5] * scale) + 'px';
-                                span.style.width = (line.width * scale) + 'px';
-                                span.style.height = '20px';
-                                span.style.cursor = 'pointer';
-                                span.style.backgroundColor = 'transparent';
-                                span.title = `"${buildingName}" 검색`;
-                                
-                                // 호버 효과
-                                span.onmouseover = () => {
-                                    span.style.backgroundColor = 'rgba(255, 255, 0, 0.3)';
-                                };
-                                span.onmouseout = () => {
-                                    span.style.backgroundColor = 'transparent';
-                                };
-                                
-                                // 클릭 이벤트 - 빌딩명으로 검색
-                                span.onclick = async () => {
-                                    this.showLoading(true);
-                                    
-                                    // 먼저 목차 기반 검색 시도
-                                    const indexSearcher = new IndexBasedPDFSearch(this.pdfDoc, this.indexMapping);
-                                    const indexResult = await indexSearcher.searchInPage(pageNum, buildingName);
-                                    
-                                    if (indexResult && indexResult.pageNum) {
-                                        this.showLoading(false);
-                                        this.goToPage(indexResult.pageNum);
-                                    } else {
-                                        // 전체 문서에서 검색
-                                        const searcher = new ImprovedPDFSearch(this.pdfDoc);
-                                        const result = await searcher.searchBuilding(buildingName);
-                                        
-                                        this.showLoading(false);
-                                        
-                                        if (result && result.pageNum) {
-                                            this.goToPage(result.pageNum);
-                                        } else {
-                                            alert(`"${buildingName}"을(를) 찾을 수 없습니다.`);
-                                        }
-                                    }
-                                    
-                                    // 모바일에서 사이드바 닫기
-                                    if (window.innerWidth <= 768) {
-                                        document.getElementById('sidebar').classList.add('hidden');
-                                    }
-                                };
-                                
-                                textLayerDiv.appendChild(span);
-                            }
-                            
-                            // 페이지 번호도 함께 처리 (빌딩명이 없는 경우)
-                            else {
-                                const pageRefMatch = line.text.match(/\b(\d{1,3})\b/g);
-                                if (pageRefMatch) {
-                                    const lastNumber = parseInt(pageRefMatch[pageRefMatch.length - 1]);
-                                    if (lastNumber > 0 && lastNumber <= this.pdfDoc.numPages) {
-                                        // 클릭 가능한 영역 생성
-                                        const span = document.createElement('span');
-                                        span.style.position = 'absolute';
-                                        span.style.left = (line.items[0].transform[4] * scale) + 'px';
-                                        span.style.bottom = (line.items[0].transform[5] * scale) + 'px';
-                                        span.style.width = (line.width * scale) + 'px';
-                                        span.style.height = '20px';
-                                        span.style.cursor = 'pointer';
-                                        span.style.backgroundColor = 'transparent';
-                                        span.title = `${lastNumber}페이지로 이동`;
-                                        
-                                        // 호버 효과
-                                        span.onmouseover = () => {
-                                            span.style.backgroundColor = 'rgba(200, 200, 255, 0.3)';
-                                        };
-                                        span.onmouseout = () => {
-                                            span.style.backgroundColor = 'transparent';
-                                        };
-                                        
-                                        // 클릭 이벤트
-                                        span.onclick = () => {
-                                            this.goToPage(lastNumber);
-                                            // 모바일에서 사이드바 닫기
-                                            if (window.innerWidth <= 768) {
-                                                document.getElementById('sidebar').classList.add('hidden');
-                                            }
-                                        };
-                                        
-                                        textLayerDiv.appendChild(span);
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    thumbnailDiv.appendChild(canvas);
                     
                     // 페이지 번호 라벨
                     const label = document.createElement('div');
-                    label.style.position = 'absolute';
-                    label.style.bottom = '5px';
-                    label.style.right = '5px';
-                    label.style.background = 'rgba(0,0,0,0.7)';
-                    label.style.color = 'white';
-                    label.style.padding = '2px 8px';
-                    label.style.borderRadius = '3px';
-                    label.style.fontSize = '11px';
+                    label.className = 'index-page-label';
                     label.textContent = `${pageNum}페이지`;
-                    pageDiv.appendChild(label);
+                    thumbnailDiv.appendChild(label);
                     
-                    container.appendChild(pageDiv);
+                    grid.appendChild(thumbnailDiv);
                     
                 } catch (error) {
-                    console.error(`목차 페이지 ${pageNum} 렌더링 실패:`, error);
+                    console.error(`목차 페이지 ${pageNum} 썸네일 생성 실패:`, error);
                 }
             }
-        }
-        
-        // 텍스트 라인의 너비 계산
-        groupTextByPosition(items) {
-            const groups = [];
-            const threshold = 5;
-            
-            items.forEach(item => {
-                if (!item.str.trim()) return;
-                
-                let foundGroup = false;
-                for (const group of groups) {
-                    if (Math.abs(group.y - item.transform[5]) < threshold) {
-                        group.items.push(item);
-                        foundGroup = true;
-                        break;
-                    }
-                }
-                
-                if (!foundGroup) {
-                    groups.push({
-                        y: item.transform[5],
-                        items: [item],
-                        text: '',
-                        width: 0
-                    });
-                }
-            });
-            
-            // 각 그룹의 텍스트 조합 및 너비 계산
-            groups.forEach(group => {
-                group.items.sort((a, b) => a.transform[4] - b.transform[4]);
-                group.text = group.items.map(item => item.str).join(' ').trim();
-                
-                // 라인의 전체 너비 계산
-                if (group.items.length > 0) {
-                    const firstItem = group.items[0];
-                    const lastItem = group.items[group.items.length - 1];
-                    group.width = (lastItem.transform[4] + (lastItem.width || 50)) - firstItem.transform[4];
-                }
-            });
-            
-            groups.sort((a, b) => b.y - a.y);
-            
-            return groups;
         }
         
         async loadPageInfo(pageNum, element) {
