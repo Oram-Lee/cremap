@@ -393,69 +393,23 @@
             display: block;
         }
         
-        /* 목차 검색 진행 상태 - 제거 */
+        /* 목차 검색 진행 상태 */
         .index-search-progress {
-            display: none !important;
-        }
-        
-        /* 목차 페이지 썸네일 섹션 */
-        .index-pages-section {
-            border-top: 1px solid #ddd;
-            margin-top: 20px;
-            padding-top: 15px;
-        }
-        
-        .index-pages-header {
-            padding: 10px 16px;
-            background: #fff3cd;
-            border-bottom: 1px solid #ffeaa7;
-            font-weight: 600;
-            color: #856404;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .index-pages-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-            padding: 10px;
-        }
-        
-        .index-page-thumbnail {
-            border: 2px solid #ffc107;
-            border-radius: 4px;
-            overflow: hidden;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            background: white;
-            position: relative;
-        }
-        
-        .index-page-thumbnail:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-            border-color: #ff9800;
-        }
-        
-        .index-page-thumbnail canvas {
-            width: 100%;
-            height: auto;
-            display: block;
-        }
-        
-        .index-page-label {
             position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(0,0,0,0.7);
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
             color: white;
-            padding: 4px;
-            font-size: 12px;
-            text-align: center;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 14px;
+            display: none;
+            z-index: 200;
+        }
+        
+        .index-search-progress.show {
+            display: block;
         }
         
         /* 모바일 대응 */
@@ -564,17 +518,6 @@
                     <i class="bi bi-hourglass-split"></i> 페이지 목록을 불러오는 중...
                 </div>
             </div>
-            
-            <!-- 목차 페이지 썸네일 섹션 -->
-            <div class="index-pages-section" id="indexPagesSection" style="display: none;">
-                <div class="index-pages-header">
-                    <i class="bi bi-bookmark-star"></i>
-                    목차 페이지 바로가기
-                </div>
-                <div class="index-pages-grid" id="indexPagesGrid">
-                    <!-- 목차 페이지 썸네일이 여기에 추가됩니다 -->
-                </div>
-            </div>
         </div>
         
         <!-- PDF 뷰어 -->
@@ -585,11 +528,11 @@
                 <span>빌딩 검색 중...</span>
             </div>
             
-            <!-- 목차 검색 진행 상태 - 숨김 처리 -->
-            <!-- <div class="index-search-progress" id="indexSearchProgress">
+            <!-- 목차 검색 진행 상태 -->
+            <div class="index-search-progress" id="indexSearchProgress">
                 <i class="bi bi-hourglass-split"></i>
                 <span id="indexSearchText">목차 페이지 검색 중...</span>
-            </div> -->
+            </div>
             
             <!-- 매칭 정보 표시 -->
             <div class="match-info" id="matchInfo"></div>
@@ -1294,7 +1237,7 @@
             this.pageNumPending = null;
             this.isAutoSearching = false;
             this.pageInfoCache = {};
-            this.debugMode = false; // 디버그 모드 기본값 false로 변경
+            this.debugMode = true;
             this.indexMapping = null;
             this.indexPages = [];
             
@@ -1475,64 +1418,6 @@
                 
                 this.loadPageInfo(i, pageItem);
             }
-            
-            // 목차 페이지 썸네일 생성
-            if (this.indexPages.length > 0) {
-                await this.generateIndexPageThumbnails();
-            }
-        }
-        
-        // 목차 페이지 썸네일 생성
-        async generateIndexPageThumbnails() {
-            const section = document.getElementById('indexPagesSection');
-            const grid = document.getElementById('indexPagesGrid');
-            
-            // 섹션 표시
-            section.style.display = 'block';
-            grid.innerHTML = '';
-            
-            // 각 목차 페이지에 대한 썸네일 생성
-            for (const pageNum of this.indexPages) {
-                try {
-                    const page = await this.pdfDoc.getPage(pageNum);
-                    const viewport = page.getViewport({ scale: 0.3 }); // 작은 썸네일
-                    
-                    const canvas = document.createElement('canvas');
-                    const context = canvas.getContext('2d');
-                    
-                    canvas.width = viewport.width;
-                    canvas.height = viewport.height;
-                    
-                    await page.render({
-                        canvasContext: context,
-                        viewport: viewport
-                    }).promise;
-                    
-                    // 썸네일 컨테이너 생성
-                    const thumbnailDiv = document.createElement('div');
-                    thumbnailDiv.className = 'index-page-thumbnail';
-                    thumbnailDiv.onclick = () => {
-                        this.goToPage(pageNum);
-                        // 사이드바 자동 닫기 (모바일)
-                        if (window.innerWidth <= 768) {
-                            document.getElementById('sidebar').classList.add('hidden');
-                        }
-                    };
-                    
-                    thumbnailDiv.appendChild(canvas);
-                    
-                    // 페이지 번호 라벨
-                    const label = document.createElement('div');
-                    label.className = 'index-page-label';
-                    label.textContent = `${pageNum}페이지`;
-                    thumbnailDiv.appendChild(label);
-                    
-                    grid.appendChild(thumbnailDiv);
-                    
-                } catch (error) {
-                    console.error(`목차 페이지 ${pageNum} 썸네일 생성 실패:`, error);
-                }
-            }
         }
         
         async loadPageInfo(pageNum, element) {
@@ -1595,8 +1480,8 @@
             // 1. 목차 기반 검색 시도
             if (this.indexMapping && this.indexPages.length > 0) {
                 this.log('📑 목차 기반 검색 시작');
-                // document.getElementById('indexSearchProgress').classList.add('show'); // 제거
-                // document.getElementById('indexSearchText').textContent = '목차 페이지에서 빌딩 검색 중...'; // 제거
+                document.getElementById('indexSearchProgress').classList.add('show');
+                document.getElementById('indexSearchText').textContent = '목차 페이지에서 빌딩 검색 중...';
                 
                 const indexSearcher = new IndexBasedPDFSearch(this.pdfDoc, this.indexMapping);
                 const indexResult = await indexSearcher.searchInIndexPages(
@@ -1605,7 +1490,7 @@
                     this.fileName
                 );
                 
-                // document.getElementById('indexSearchProgress').classList.remove('show'); // 제거
+                document.getElementById('indexSearchProgress').classList.remove('show');
                 
                 if (indexResult) {
                     this.log(`✅ 목차에서 빌딩 발견! ${indexResult.pageNum}페이지로 이동`);
