@@ -535,22 +535,15 @@
                 this.loaded = true;
                 
                 console.log('✅ PDF 빌딩 매핑 데이터 로드 완료');
-                console.log('매핑 데이터 구조:', data);
+                console.log(`로드된 PDF 수: ${data.pdfs.length}`);
                 
-                // 데이터 구조 디버깅
-                if (data.pdfs && Array.isArray(data.pdfs)) {
-                    console.log(`로드된 PDF 수: ${data.pdfs.length}`);
-                    
-                    // 사용 가능한 회사 목록 출력
+                // 디버깅을 위해 사용 가능한 회사 목록 출력
+                if (data.pdfs && data.pdfs.length > 0) {
                     data.pdfs.forEach(pdf => {
                         if (pdf.companies) {
                             console.log(`파일 ${pdf.fileName}의 회사들:`, Object.keys(pdf.companies));
-                        } else if (pdf.buildings) {
-                            console.log(`파일 ${pdf.fileName}의 빌딩들:`, Object.keys(pdf.buildings));
                         }
                     });
-                } else {
-                    console.log('기존 구조의 매핑 데이터:', Object.keys(data));
                 }
                 
                 return true;
@@ -571,35 +564,50 @@
             
             console.log(`🔍 페이지 찾기: 파일=${fileName}, 빌딩=${buildingName}, 회사=${company}`);
             
-            // 현재 JSON 구조에 맞게 수정
-            if (this.mappingData.pdfs && Array.isArray(this.mappingData.pdfs)) {
-                const pdfData = this.mappingData.pdfs.find(pdf => 
-                    pdf.fileName === fileName || 
-                    pdf.fileName === fileName.replace('.pdf', '') ||
-                    pdf.fileName === fileName + '.pdf'
-                );
-                
-                if (!pdfData) {
-                    console.warn(`PDF 파일을 찾을 수 없습니다: ${fileName}`);
-                    return null;
-                }
-                
-                // 현재 구조: company와 buildings가 같은 레벨에 있음
-                if (pdfData.buildings) {
-                    console.log('빌딩 데이터 발견:', Object.keys(pdfData.buildings));
-                    
-                    const result = this.searchInCompanyBuildings(pdfData.buildings, buildingName);
-                    if (result) {
-                        console.log(`✅ Direct Mapping 발견: ${result.building} → ${result.page}페이지`);
-                        return result.page;
-                    }
-                }
-                
-                console.warn(`빌딩을 찾을 수 없습니다: ${buildingName}`);
+            // PDF 파일 찾기
+            const pdfData = this.mappingData.pdfs.find(pdf => 
+                pdf.fileName === fileName || 
+                pdf.fileName === fileName.replace('.pdf', '')
+            );
+            
+            if (!pdfData) {
+                console.warn(`PDF 파일을 찾을 수 없습니다: ${fileName}`);
                 return null;
             }
             
-            console.warn('매핑 데이터 구조를 인식할 수 없습니다.');
+            // 회사별 빌딩 찾기 - 에러 처리 추가
+            if (!pdfData.companies) {
+                console.warn(`PDF에 회사 데이터가 없습니다: ${fileName}`);
+                return null;
+            }
+            
+            const companyData = pdfData.companies[company];
+            if (!companyData || !companyData.buildings) {
+                console.warn(`회사 데이터를 찾을 수 없습니다: ${company}`);
+                // 다른 회사들도 검색 시도
+                console.log('다른 회사 데이터에서 빌딩 검색 시도...');
+                
+                for (const [companyKey, data] of Object.entries(pdfData.companies)) {
+                    if (data && data.buildings) {
+                        const result = this.searchInCompanyBuildings(data.buildings, buildingName);
+                        if (result) {
+                            console.log(`✅ ${companyKey}에서 빌딩 발견: ${result.building} → ${result.page}페이지`);
+                            return result.page;
+                        }
+                    }
+                }
+                
+                return null;
+            }
+            
+            // 해당 회사의 빌딩에서 검색
+            const result = this.searchInCompanyBuildings(companyData.buildings, buildingName);
+            if (result) {
+                console.log(`✅ Direct Mapping 발견: ${result.building} → ${result.page}페이지`);
+                return result.page;
+            }
+            
+            console.warn(`빌딩을 찾을 수 없습니다: ${buildingName}`);
             return null;
         }
         
