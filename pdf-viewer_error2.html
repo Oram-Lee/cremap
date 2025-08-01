@@ -1541,6 +1541,10 @@
         }
         
         showLoading(show) {
+            document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
+        }
+        
+        showLoading(show) {
             const loadingOverlay = document.getElementById('loadingOverlay');
             if (loadingOverlay) {
                 loadingOverlay.style.display = show ? 'flex' : 'none';
@@ -1549,12 +1553,8 @@
         
         showError(message) {
             this.showLoading(false);
-            const errorMessage = document.getElementById('errorMessage');
-            const errorText = document.getElementById('errorText');
-            if (errorMessage && errorText) {
-                errorMessage.style.display = 'block';
-                errorText.textContent = message;
-            }
+            document.getElementById('errorMessage').style.display = 'block';
+            document.getElementById('errorText').textContent = message;
         }
     }
     
