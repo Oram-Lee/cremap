@@ -537,19 +537,9 @@
                 console.log('✅ PDF 빌딩 매핑 데이터 로드 완료');
                 console.log(`로드된 PDF 수: ${data.pdfs.length}`);
                 
-                // 디버깅을 위해 사용 가능한 회사 목록 출력
-                if (data.pdfs && data.pdfs.length > 0) {
-                    data.pdfs.forEach(pdf => {
-                        if (pdf.companies) {
-                            console.log(`파일 ${pdf.fileName}의 회사들:`, Object.keys(pdf.companies));
-                        }
-                    });
-                }
-                
                 return true;
             } catch (error) {
                 console.error('❌ PDF 빌딩 매핑 데이터 로드 실패:', error);
-                console.warn('매핑 데이터 없이 텍스트 검색만 사용합니다.');
                 this.loaded = false;
                 return false;
             }
@@ -575,62 +565,35 @@
                 return null;
             }
             
-            // 회사별 빌딩 찾기 - 에러 처리 추가
-            if (!pdfData.companies) {
-                console.warn(`PDF에 회사 데이터가 없습니다: ${fileName}`);
-                return null;
-            }
-            
+            // 회사별 빌딩 찾기
             const companyData = pdfData.companies[company];
             if (!companyData || !companyData.buildings) {
                 console.warn(`회사 데이터를 찾을 수 없습니다: ${company}`);
-                // 다른 회사들도 검색 시도
-                console.log('다른 회사 데이터에서 빌딩 검색 시도...');
-                
-                for (const [companyKey, data] of Object.entries(pdfData.companies)) {
-                    if (data && data.buildings) {
-                        const result = this.searchInCompanyBuildings(data.buildings, buildingName);
-                        if (result) {
-                            console.log(`✅ ${companyKey}에서 빌딩 발견: ${result.building} → ${result.page}페이지`);
-                            return result.page;
-                        }
-                    }
-                }
-                
                 return null;
             }
             
-            // 해당 회사의 빌딩에서 검색
-            const result = this.searchInCompanyBuildings(companyData.buildings, buildingName);
-            if (result) {
-                console.log(`✅ Direct Mapping 발견: ${result.building} → ${result.page}페이지`);
-                return result.page;
-            }
-            
-            console.warn(`빌딩을 찾을 수 없습니다: ${buildingName}`);
-            return null;
-        }
-        
-        // 회사 빌딩 데이터에서 검색하는 헬퍼 메서드
-        searchInCompanyBuildings(buildings, searchBuildingName) {
-            const normalizedBuildingName = this.normalizeText(searchBuildingName);
+            // 빌딩명 정규화 (공백, 특수문자 제거)
+            const normalizedBuildingName = this.normalizeText(buildingName);
             
             // 정확한 매칭 시도
-            for (const [building, page] of Object.entries(buildings)) {
+            for (const [building, page] of Object.entries(companyData.buildings)) {
                 if (this.normalizeText(building) === normalizedBuildingName) {
-                    return { building, page };
+                    console.log(`✅ Direct Mapping 발견: ${building} → ${page}페이지`);
+                    return page;
                 }
             }
             
             // 부분 매칭 시도
-            for (const [building, page] of Object.entries(buildings)) {
+            for (const [building, page] of Object.entries(companyData.buildings)) {
                 const normalizedBuilding = this.normalizeText(building);
                 if (normalizedBuilding.includes(normalizedBuildingName) || 
                     normalizedBuildingName.includes(normalizedBuilding)) {
-                    return { building, page };
+                    console.log(`✅ Partial Mapping 발견: ${building} → ${page}페이지`);
+                    return page;
                 }
             }
             
+            console.warn(`빌딩을 찾을 수 없습니다: ${buildingName}`);
             return null;
         }
         
@@ -1316,29 +1279,25 @@
             if (this.mappingManager.loaded && this.searchText) {
                 this.log('🔍 Direct Mapping 검색 시작');
                 
-                try {
-                    const pageNumber = this.mappingManager.findPageNumber(
-                        this.fileName,
-                        this.searchText,
-                        this.companyName
-                    );
+                const pageNumber = this.mappingManager.findPageNumber(
+                    this.fileName,
+                    this.searchText,
+                    this.companyName
+                );
+                
+                if (pageNumber) {
+                    this.log(`✅ Direct Mapping 성공! ${pageNumber}페이지로 이동`);
+                    this.showMatchInfo(`Direct Mapping: ${this.searchText}`, { pageNum: pageNumber });
                     
-                    if (pageNumber) {
-                        this.log(`✅ Direct Mapping 성공! ${pageNumber}페이지로 이동`);
-                        this.showMatchInfo(`Direct Mapping: ${this.searchText}`, { pageNum: pageNumber });
-                        
-                        // Direct Mapping 표시
-                        document.getElementById('directMappingIndicator').classList.add('active');
-                        setTimeout(() => {
-                            document.getElementById('directMappingIndicator').classList.remove('active');
-                        }, 3000);
-                        
-                        await this.renderPage(pageNumber);
-                        this.updateActivePageItem(pageNumber);
-                        return true;
-                    }
-                } catch (error) {
-                    console.error('Direct Mapping 검색 중 에러:', error);
+                    // Direct Mapping 표시
+                    document.getElementById('directMappingIndicator').classList.add('active');
+                    setTimeout(() => {
+                        document.getElementById('directMappingIndicator').classList.remove('active');
+                    }, 3000);
+                    
+                    await this.renderPage(pageNumber);
+                    this.updateActivePageItem(pageNumber);
+                    return true;
                 }
             }
             
@@ -1363,25 +1322,19 @@
             if (this.fallbackSearches.length > 0) {
                 this.log('Fallback 검색 시작');
                 for (const fallback of this.fallbackSearches) {
-                    if (this.mappingManager.loaded) {
-                        try {
-                            // Direct Mapping 시도
-                            const fallbackPage = this.mappingManager.findPageNumber(
-                                this.fileName,
-                                fallback,
-                                this.companyName
-                            );
-                            
-                            if (fallbackPage) {
-                                this.log(`Fallback Direct Mapping: ${fallback} → ${fallbackPage}페이지`);
-                                this.showMatchInfo(`Fallback Mapping: ${fallback}`, { pageNum: fallbackPage });
-                                await this.renderPage(fallbackPage);
-                                this.updateActivePageItem(fallbackPage);
-                                return true;
-                            }
-                        } catch (error) {
-                            console.error('Fallback Direct Mapping 중 에러:', error);
-                        }
+                    // Direct Mapping 시도
+                    const fallbackPage = this.mappingManager.findPageNumber(
+                        this.fileName,
+                        fallback,
+                        this.companyName
+                    );
+                    
+                    if (fallbackPage) {
+                        this.log(`Fallback Direct Mapping: ${fallback} → ${fallbackPage}페이지`);
+                        this.showMatchInfo(`Fallback Mapping: ${fallback}`, { pageNum: fallbackPage });
+                        await this.renderPage(fallbackPage);
+                        this.updateActivePageItem(fallbackPage);
+                        return true;
                     }
                     
                     // 텍스트 검색
