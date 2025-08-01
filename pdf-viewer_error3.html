@@ -1057,26 +1057,6 @@
             // 회사명 추출
             this.companyName = params.get('source') || this.extractCompanyFromFileName(this.fileName);
             
-            // 메서드 바인딩 (권장 해결책 - 방법 1)
-            this.showLoading = this.showLoading.bind(this);
-            this.showError = this.showError.bind(this);
-            this.loadPDF = this.loadPDF.bind(this);
-            this.renderPage = this.renderPage.bind(this);
-            this.goToPage = this.goToPage.bind(this);
-            this.previousPage = this.previousPage.bind(this);
-            this.nextPage = this.nextPage.bind(this);
-            this.zoomIn = this.zoomIn.bind(this);
-            this.zoomOut = this.zoomOut.bind(this);
-            this.performSearch = this.performSearch.bind(this);
-            this.comprehensiveSearch = this.comprehensiveSearch.bind(this);
-            this.updateActivePageItem = this.updateActivePageItem.bind(this);
-            this.showMatchInfo = this.showMatchInfo.bind(this);
-            this.log = this.log.bind(this);
-            this.toggleDebug = this.toggleDebug.bind(this);
-            this.generatePageList = this.generatePageList.bind(this);
-            this.loadPageInfo = this.loadPageInfo.bind(this);
-            this.extractKeyInfo = this.extractKeyInfo.bind(this);
-            
             this.log('초기화 파라미터:', {
                 file: this.fileName,
                 company: this.companyName,
@@ -1168,10 +1148,7 @@
         
         async loadPDF(fileName) {
             try {
-                // 안전장치 추가 (권장 해결책 - 방법 3)
-                if (typeof this.showLoading === 'function') {
-                    this.showLoading(true);
-                }
+                this.showLoading(true);
                 
                 const url = `./pdfs/${fileName}`;
                 this.log('PDF 로드:', url);
@@ -1184,16 +1161,11 @@
                 document.getElementById('pageNum').max = this.pdfDoc.numPages;
                 
                 this.generatePageList();
-                
-                if (typeof this.showLoading === 'function') {
-                    this.showLoading(false);
-                }
+                this.showLoading(false);
                 
             } catch (error) {
                 console.error('PDF 로드 실패:', error);
-                if (typeof this.showError === 'function') {
-                    this.showError(`PDF 로드 실패: ${error.message}`);
-                }
+                this.showError(`PDF 로드 실패: ${error.message}`);
             }
         }
         
@@ -1412,10 +1384,7 @@
             if (!searchText || !this.pdfDoc) return;
             
             this.log('수동 검색 시작:', searchText);
-            
-            if (typeof this.showLoading === 'function') {
-                this.showLoading(true);
-            }
+            this.showLoading(true);
             
             // Direct Mapping 먼저 시도
             if (this.mappingManager.loaded) {
@@ -1426,9 +1395,7 @@
                 );
                 
                 if (pageNumber) {
-                    if (typeof this.showLoading === 'function') {
-                        this.showLoading(false);
-                    }
+                    this.showLoading(false);
                     this.log(`Direct Mapping 결과: ${searchText} → ${pageNumber}페이지`);
                     this.showMatchInfo(`Direct Mapping: ${searchText}`, { pageNum: pageNumber });
                     
@@ -1450,9 +1417,7 @@
                 rent: this.rentArea
             });
             
-            if (typeof this.showLoading === 'function') {
-                this.showLoading(false);
-            }
+            this.showLoading(false);
             
             if (result && result.score > 30) {
                 this.log(`수동 검색 결과: ${result.match ? result.match.name : searchText} (${result.pageNum}페이지)`);
@@ -1575,7 +1540,6 @@
             this.renderPage(this.currentPage);
         }
         
-        // showLoading 메서드 정의
         showLoading(show) {
             const loadingOverlay = document.getElementById('loadingOverlay');
             if (loadingOverlay) {
@@ -1583,7 +1547,6 @@
             }
         }
         
-        // showError 메서드 정의
         showError(message) {
             this.showLoading(false);
             const errorMessage = document.getElementById('errorMessage');
