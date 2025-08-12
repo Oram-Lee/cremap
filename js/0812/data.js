@@ -118,32 +118,17 @@ const DataManager = {
         }
     },
     
-    // ⭐ 개선된 데이터 병합 메서드 - 양방향 데이터 보완 + STATUS 필터링 추가
+    // ⭐ 개선된 데이터 병합 메서드 - 양방향 데이터 보완
     mergeData() {
         console.group('🔄 데이터 병합 시작 (개선된 버전)');
-        
-        // 통계 변수 추가
-        let inactiveBuildingsCount = 0;
-        let inactiveVacanciesCount = 0;
-        let activeBuildingsCount = 0;
-        let activeVacanciesCount = 0;
         
         // 1단계: 빌딩 정보와 공실 정보를 Map으로 구성
         const buildingMap = new Map();
         const vacancyMap = new Map();
         
-        // 빌딩 정보 Map 생성 - STATUS 체크 추가
+        // 빌딩 정보 Map 생성
         if (this.excelData.buildings) {
             this.excelData.buildings.forEach(building => {
-                // ✅ inactive 상태 체크 및 통계
-                if (building.status === 'inactive') {
-                    inactiveBuildingsCount++;
-                    console.log(`⏭️ 비활성 빌딩 스킵: ${building['빌딩명']} (출처: ${building['출처회사']})`);
-                    return; // 다음 항목으로
-                }
-                
-                activeBuildingsCount++;
-                
                 const cleanedName = building['빌딩명'] ? 
                     building['빌딩명'].replace(/[\u200B-\u200D\uFEFF\u202C]/g, '').trim() : '';
                 const source = building['출처회사'] || building['출처'] || '';
@@ -156,18 +141,9 @@ const DataManager = {
             });
         }
         
-        // 공실 정보 Map 생성 - STATUS 체크 추가
+        // 공실 정보 Map 생성
         if (this.excelData.vacancies) {
             this.excelData.vacancies.forEach(vacancy => {
-                // ✅ inactive 상태 체크 및 통계
-                if (vacancy.status === 'inactive') {
-                    inactiveVacanciesCount++;
-                    console.log(`⏭️ 비활성 공실 스킵: ${vacancy['빌딩명']} ${vacancy['공실층']} (출처: ${vacancy['출처회사']})`);
-                    return; // 다음 항목으로
-                }
-                
-                activeVacanciesCount++;
-                
                 const cleanedName = vacancy['빌딩명'] ? 
                     vacancy['빌딩명'].replace(/[\u200B-\u200D\uFEFF\u202C]/g, '').trim() : '';
                 const source = vacancy['출처회사'] || vacancy['출처'] || '';
@@ -180,15 +156,8 @@ const DataManager = {
             });
         }
         
-        // 상태별 통계 출력
-        console.log('📊 상태별 데이터 통계:');
-        console.log(`   ✅ 활성 빌딩: ${activeBuildingsCount}개`);
-        console.log(`   ⏸️ 비활성 빌딩: ${inactiveBuildingsCount}개`);
-        console.log(`   ✅ 활성 공실: ${activeVacanciesCount}개`);
-        console.log(`   ⏸️ 비활성 공실: ${inactiveVacanciesCount}개`);
-        console.log(`📋 활성 데이터만 처리:`);
-        console.log(`   - 빌딩 맵: ${buildingMap.size}개 고유 빌딩`);
-        console.log(`   - 공실 맵: ${vacancyMap.size}개 고유 빌딩`);
+        console.log(`📋 빌딩 맵 생성: ${buildingMap.size}개 고유 빌딩`);
+        console.log(`📋 공실 맵 생성: ${vacancyMap.size}개 고유 빌딩`);
         
         // 2단계: 병합된 데이터 생성
         this.mergedData = [];
@@ -259,7 +228,6 @@ const DataManager = {
         console.log(`✅ 데이터 병합 완료: ${this.mergedData.length}개 레코드`);
         console.log(`   - 공실 있는 빌딩: ${processedKeys.size}개`);
         console.log(`   - 공실 없는 빌딩: ${buildingMap.size - processedKeys.size}개`);
-        console.log(`   - 필터링된 inactive 데이터: ${inactiveBuildingsCount + inactiveVacanciesCount}개`);
         
         // 병합 결과 샘플 출력
         if (this.mergedData.length > 0) {
@@ -346,8 +314,7 @@ const DataManager = {
                 '기준층전용면적': '500',
                 '빌딩규모': 'B6/38F',
                 '연면적': '82,742',
-                '출처회사': 'CBRE',
-                'status': 'active'  // 샘플 데이터에도 status 추가
+                '출처회사': 'CBRE'
             },
             {
                 '빌딩명': '역삼IT타워',
@@ -356,8 +323,7 @@ const DataManager = {
                 '기준층전용면적': '300',
                 '빌딩규모': 'B4/25F',
                 '연면적': '45,320',
-                '출처회사': 'ACT',
-                'status': 'active'  // 샘플 데이터에도 status 추가
+                '출처회사': 'ACT'
             },
             {
                 '빌딩명': '선릉비즈센터',
@@ -366,8 +332,7 @@ const DataManager = {
                 '기준층전용면적': '400',
                 '빌딩규모': 'B5/30F',
                 '연면적': '65,480',
-                '출처회사': 'KTG',
-                'status': 'active'  // 샘플 데이터에도 status 추가
+                '출처회사': 'KTG'
             }
         ];
     },
@@ -384,8 +349,7 @@ const DataManager = {
                 '관리비': '25,000',
                 '보증금': '10,000,000',
                 '입주시기': '즉시',
-                '출처회사': 'CBRE',
-                'status': 'active'  // 샘플 데이터에도 status 추가
+                '출처회사': 'CBRE'
             },
             {
                 '빌딩명': '역삼IT타워',
@@ -396,8 +360,7 @@ const DataManager = {
                 '관리비': '20,000',
                 '보증금': '8,000,000',
                 '입주시기': '협의',
-                '출처회사': 'ACT',
-                'status': 'active'  // 샘플 데이터에도 status 추가
+                '출처회사': 'ACT'
             },
             {
                 '빌딩명': '선릉비즈센터',
@@ -408,8 +371,7 @@ const DataManager = {
                 '관리비': '30,000',
                 '보증금': '12,000,000',
                 '입주시기': '24년 12월',
-                '출처회사': 'KTG',
-                'status': 'active'  // 샘플 데이터에도 status 추가
+                '출처회사': 'KTG'
             }
         ];
     },
