@@ -10728,7 +10728,7 @@
         "MOVE_페이지_215.png",
         "MOVE_페이지_221.png"
       ],
-      "status": "active",
+      "status": "inactive",
       "reactivated_at": "2025-07-25T05:15:28.404728",
       "status_history": [
         {
@@ -326307,6 +326307,7 @@
       "관리비": "68",
       "보증금": "2272",
       "입주시기": "즉시",
+      "status": "inactive",
       "연락처": "팀장 010-8518-9949 강신우 sw.kang@movepmd.co.kr",
       "기타": ""
     },
