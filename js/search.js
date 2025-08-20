@@ -183,7 +183,28 @@ const SearchManager = {
         });
     },
     
-    // ⭐ 중복 제거 메서드 추가
+    // ⭐ 비활성 빌딩 필터링 메서드 추가
+    filterInactiveBuildings(results) {
+        console.group('🚫 비활성 빌딩 필터링');
+        const beforeCount = results.length;
+        
+        // status가 'inactive'인 빌딩 제외
+        const activeResults = results.filter(building => {
+            if (building.status === 'inactive') {
+                console.log(`비활성 빌딩 제외: ${building.빌딩명} (${building.출처회사})`);
+                return false;
+            }
+            return true;
+        });
+        
+        const removedCount = beforeCount - activeResults.length;
+        console.log(`✅ 필터링 완료: ${beforeCount}개 → ${activeResults.length}개 (${removedCount}개 비활성)`);
+        console.groupEnd();
+        
+        return activeResults;
+    },
+    
+    // ⭐ 중복 제거 메서드
     removeDuplicates(results, context = 'unknown') {
         console.group(`🔍 중복 제거 [${context}]`);
         console.log(`원본 결과 수: ${results.length}`);
@@ -256,7 +277,7 @@ const SearchManager = {
         return uniqueResults;
     },
     
-    // 검색 실행 - 1차 중복 제거 추가
+    // 검색 실행 - 비활성 필터링 추가
     performSearch() {
         const searchType = document.getElementById('searchType').value;
         const criteria = {};
@@ -283,8 +304,11 @@ const SearchManager = {
         // 검색 실행
         const rawResults = DataManager.search(criteria);
         
-        // ⭐ 1차 중복 제거 (performSearch 시점)
-        const uniqueResults = this.removeDuplicates(rawResults, 'performSearch');
+        // ⭐ 1. 비활성 빌딩 필터링 (가장 먼저!)
+        const activeResults = this.filterInactiveBuildings(rawResults);
+        
+        // ⭐ 2. 중복 제거
+        const uniqueResults = this.removeDuplicates(activeResults, 'performSearch');
         
         // 중복 제거된 결과를 저장
         DataManager.currentResults = uniqueResults;
@@ -293,8 +317,13 @@ const SearchManager = {
         this.currentPage = 1;
         this.displayResults();
         
-        // 전체 중복 제거 통계 표시
-        console.log('📊 전체 중복 제거 통계:', this.duplicateStats);
+        // 전체 통계 표시
+        console.log('📊 전체 처리 통계:', {
+            원본: rawResults.length,
+            비활성제외: activeResults.length,
+            중복제거: uniqueResults.length,
+            중복통계: this.duplicateStats
+        });
         
         // 검색 완료 이벤트 발생
         document.dispatchEvent(new CustomEvent('searchComplete'));
@@ -393,14 +422,17 @@ const SearchManager = {
         return filledResults;
     },
     
-    // 검색 결과 표시 - 2차 중복 제거 추가
+    // 검색 결과 표시 - 추가 필터링
     displayResults() {
         const results = DataManager.currentResults;
         const tbody = document.getElementById('resultsBody');
         const resultCount = document.getElementById('resultCount');
         
-        // ⭐ 2차 중복 제거 (displayResults 시점)
-        const uniqueResults = this.removeDuplicates(results, 'displayResults');
+        // ⭐ 다시 한번 비활성 필터링 (안전장치)
+        const activeResults = this.filterInactiveBuildings(results);
+        
+        // ⭐ 2차 중복 제거
+        const uniqueResults = this.removeDuplicates(activeResults, 'displayResults');
         
         // 빈 필드 채우기
         const filledResults = this.fillEmptyFields(uniqueResults);
@@ -431,7 +463,7 @@ const SearchManager = {
         this.updatePagination(filledResults.length);
     },
     
-    // 새로운 비동기 렌더링 메서드
+    // 비동기 렌더링 메서드
     async renderTableRows(pageResults, startIndex, tbody) {
         const rows = [];
         
@@ -556,7 +588,7 @@ const SearchManager = {
         DataManager.toggleBuildingSelection(buildingData);
     },
     
-    // 상세보기 - PDF 열기 (수정된 버전)
+    // 상세보기 - PDF 열기
     showDetail(index) {
         const item = DataManager.currentResults[index];
         
@@ -574,7 +606,8 @@ const SearchManager = {
                 주소: item.주소,
                 인근역: item.인근역,
                 공실전용면적: item['공실전용면적(평)'] || item.공실전용면적,
-                공실임대면적: item['공실임대면적(평)'] || item.공실임대면적
+                공실임대면적: item['공실임대면적(평)'] || item.공실임대면적,
+                status: item.status  // ⭐ status 추가
             });
         } else {
             // PDFSearchManager가 없을 경우 직접 처리

@@ -141,7 +141,7 @@ class PDFSearchManager {
         }
     }
 
-    // PDF 열기 (자동 검색 기능 포함) - 비활성 체크 추가
+    // PDF 열기 (자동 검색 기능 포함) - 개선된 에러 핸들링
     async openPDFWithSearch(buildingData) {
         try {
             console.group('🔍 PDF 검색 디버깅 정보');
@@ -151,16 +151,7 @@ class PDFSearchManager {
                 throw new Error('빌딩 데이터가 없습니다.');
             }
             
-            // ⭐ 비활성 빌딩 체크 추가
-            if (buildingData.status === 'inactive') {
-                console.warn(`⚠️ 비활성 빌딩: ${buildingData.빌딩명}`);
-                alert('현재 비활성 상태인 빌딩입니다.\n관리자에게 문의하세요.');
-                console.groupEnd();
-                return false;
-            }
-            
             console.log('빌딩 데이터:', buildingData);
-            console.log('빌딩 상태:', buildingData.status || 'active');
             console.log('빌딩명:', buildingData.빌딩명);
             console.log('출처회사:', buildingData.출처회사 || buildingData.출처);
             console.log('주소:', buildingData.주소);
