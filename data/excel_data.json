@@ -21620,7 +21620,7 @@
       "출처회사": "JLL",
       "빌딩명": "하나증권빌딩",
       "주소": "서울특별시 영등포구 의사당대로 8",
-      "인근역": "국회의사당역",
+      "인근역": "5호선 여의도역 2분"
       "연면적": "69826.28",
       "빌딩규모": "지상 11층 / 지하 3층",
       "기준층전용면적": "1074.95",
@@ -41017,11 +41017,11 @@
       ],
       "last_updated": "2025-07-25T02:31:40.103173",
       "updated_by": "RS",
-      "status": "active",
+      "status": "inactive",
       "reactivated_at": "2025-07-25T02:31:40.103186",
       "status_history": [
         {
-          "status": "reactivated",
+          "status": "deactivated",
           "timestamp": "2025-07-25T02:31:40.103190",
           "reason": "정보 업데이트"
         }
@@ -175614,7 +175614,7 @@
       ],
       "id": "34725e3a-89ba-4606-b280-57db8af5e83a",
       "updated_at": "2025-07-25T02:31:40.106459",
-      "status": "active",
+      "status": "inactive",
       "status_history": [
         {
           "status": "created",
@@ -175640,7 +175640,7 @@
       ],
       "id": "108000fd-2061-4d08-9078-4ebddf47119e",
       "updated_at": "2025-07-25T02:31:40.106511",
-      "status": "active",
+      "status": "inactive",
       "status_history": [
         {
           "status": "created",
@@ -378332,6 +378332,7 @@
       "입주시기": "즉시",
       "연락처": "노종윤 상무 010-6223-3392 / Ryan.Roh@rsquare.co.kr, 고중석 팀장 010-9006-6384 / jsko82@rsquare.co.kr, 송다영 선임 010-9305-0929 / dysong@rsquare.co.kr",
       "기타": "",
+      "status":"inactive",
       "id": "78c9bb61-f6c3-4e87-a153-7e382945ddde",
       "building_name": "하나증권빌딩",
       "company": "RS",
@@ -378349,6 +378350,7 @@
       "입주시기": "즉시",
       "연락처": "노종윤 상무 010-6223-3392 / Ryan.Roh@rsquare.co.kr, 고중석 팀장 010-9006-6384 / jsko82@rsquare.co.kr, 송다영 선임 010-9305-0929 / dysong@rsquare.co.kr",
       "기타": "",
+      "status":"inactive",
       "id": "df220964-c6df-484d-90c5-a38889635dcd",
       "building_name": "하나증권빌딩",
       "company": "RS",
