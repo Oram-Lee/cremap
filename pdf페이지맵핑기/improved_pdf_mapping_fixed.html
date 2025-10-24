@@ -1,0 +1,5241 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 페이지 매핑 도구 - Fixed Version</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        pdfjsLib.disableWorkerMessageHandler = true;
+    </script>
+    
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .main-container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .content-wrapper {
+            display: flex;
+            gap: 20px;
+            height: calc(100vh - 200px);
+        }
+        
+        /* 왼쪽 패널 - 빌딩 목록 */
+        .left-panel {
+            flex: 0 0 550px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        
+        /* 검색 입력 필드 */
+        .search-input-section {
+            margin-bottom: 15px;
+        }
+        
+        .search-input {
+            position: relative;
+        }
+        
+        .search-input input {
+            width: 100%;
+            padding: 10px 40px 10px 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        
+        .search-input input:focus {
+            outline: none;
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+        }
+        
+        .search-input .search-icon {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #6c757d;
+            pointer-events: none;
+        }
+        
+        .search-results-count {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 5px;
+            text-align: center;
+        }
+        
+        .search-highlight {
+            background-color: #fff3cd !important;
+            animation: searchPulse 1s ease-in-out;
+        }
+        
+        @keyframes searchPulse {
+            0%, 100% { background-color: #fff3cd; }
+            50% { background-color: #ffc107; }
+        }
+        
+        /* 플로팅 신규 빌딩 추가 버튼 */
+        .floating-add-building {
+            position: fixed;
+            bottom: 30px;
+            left: 30px;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            z-index: 999;
+            transition: all 0.3s ease;
+        }
+        
+        .floating-add-building:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+        
+        .floating-add-building .tooltip-text {
+            position: absolute;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            white-space: nowrap;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        
+        .floating-add-building:hover .tooltip-text {
+            opacity: 1;
+        }
+        
+        /* 데이터 로드 섹션 */
+        .data-load-section {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .data-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            margin-bottom: 8px;
+            background: white;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .data-status.loaded {
+            border-left: 3px solid #28a745;
+        }
+        
+        .data-status.not-loaded {
+            border-left: 3px solid #dc3545;
+        }
+        
+        /* 백업 관리 섹션 */
+        .backup-section {
+            padding: 10px;
+            background: #e7f3ff;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            border: 1px solid #b6d4fe;
+        }
+        
+        .backup-controls {
+            display: flex;
+            gap: 5px;
+            margin-top: 8px;
+        }
+        
+        .backup-controls button {
+            flex: 1;
+            font-size: 12px;
+            padding: 4px 8px;
+        }
+        
+        /* 전체 선택 컨트롤 */
+        .select-all-controls {
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .select-all-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .bulk-status-buttons {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+        
+        .bulk-status-btn {
+            padding: 4px 8px;
+            font-size: 12px;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .bulk-status-btn:hover {
+            background: #f8f9fa;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .bulk-status-btn.vacant {
+            background: #fff3cd;
+            border-color: #ffc107;
+        }
+        
+        .bulk-status-btn.vacant:hover {
+            background: #ffc107;
+            color: white;
+        }
+        
+        /* 빌딩 그룹 (빌딩 + 공실) */
+        .building-group {
+            margin-bottom: 15px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .building-group:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .building-group.search-matched {
+            border-color: #ffc107;
+            box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.25);
+        }
+        
+        /* 이전 상태 표시 */
+        .previous-state-indicator {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            font-size: 10px;
+            padding: 2px 6px;
+            background: #ffc107;
+            color: #000;
+            border-radius: 3px;
+            display: none;
+        }
+        
+        .building-group.has-previous .previous-state-indicator {
+            display: block;
+        }
+        
+        .building-header {
+            padding: 10px 12px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: stretch;
+        }
+        
+        .building-header.selected {
+            background: #e7f3ff;
+            border-left: 3px solid #0d6efd;
+        }
+        
+        .building-header.mapped {
+            background: #d4edda;
+        }
+        
+        .building-header.vacant {
+            background: #fff3cd;
+        }
+        
+        .building-info {
+            flex: 1;
+        }
+        
+        .building-name {
+            font-weight: 600;
+            font-size: 14px;
+            color: #212529;
+        }
+        
+        .building-address {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 2px;
+        }
+        
+        .building-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 380px;
+        }
+        
+        .building-controls-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        
+        .building-controls-row.primary {
+            justify-content: flex-end;
+        }
+        
+        .building-controls-row.secondary {
+            justify-content: flex-end;
+            font-size: 11px;
+        }
+        
+        /* 빌딩 편집 버튼 */
+        .edit-building-btn {
+            padding: 2px 6px;
+            font-size: 10px;
+            border: 1px solid #28a745;
+            background: #28a745;
+            color: white;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .edit-building-btn:hover {
+            background: #218838;
+            border-color: #218838;
+        }
+        
+        /* 빌딩 삭제 버튼 */
+        .delete-building-btn {
+            padding: 2px 6px;
+            font-size: 10px;
+            border: 1px solid #dc3545;
+            background: #dc3545;
+            color: white;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .delete-building-btn:hover {
+            background: #c82333;
+            border-color: #c82333;
+        }
+        
+        /* 빌딩 편집 모달 */
+        .building-edit-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 3000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .building-edit-modal.show {
+            display: flex;
+        }
+        
+        .building-edit-content {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            max-width: 900px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        
+        /* 빌딩 복사 섹션 */
+        .building-copy-section {
+            background: #f0f8ff;
+            border: 1px solid #b6d4fe;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .building-search-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        
+        .building-search-results {
+            max-height: 300px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+        }
+        
+        .search-result-item {
+            padding: 10px;
+            border-bottom: 1px solid #f8f9fa;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .search-result-item:hover {
+            background: #e7f3ff;
+        }
+        
+        .search-result-item.selected {
+            background: #d1ecf1;
+            border-left: 3px solid #0d6efd;
+        }
+        
+        .search-result-building {
+            font-weight: 600;
+            font-size: 14px;
+            color: #212529;
+        }
+        
+        .search-result-company {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .search-result-address {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .search-result-vacancies {
+            margin-top: 5px;
+            padding: 5px;
+            background: #f8f9fa;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+        
+        .vacancy-checkbox-list {
+            margin-top: 10px;
+            padding: 10px;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .vacancy-checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px;
+            margin-bottom: 5px;
+            background: #f8f9fa;
+            border-radius: 3px;
+        }
+        
+        /* 공실 편집 아이템 - 개선된 UI */
+        .vacancy-edit-item {
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+        }
+        
+        .vacancy-edit-controls {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .vacancy-edit-controls input {
+            flex: 1;
+            min-width: 80px;
+        }
+        
+        .vacancy-edit-controls select {
+            width: auto;
+            min-width: 90px;
+        }
+        
+        .vacancy-edit-controls button {
+            padding: 4px 8px;
+            font-size: 11px;
+        }
+        
+        .vacancy-controls-row {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        
+        /* 신규/편집 모드 표시 */
+        .edit-mode-indicator {
+            padding: 8px 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        
+        .edit-mode-indicator.new {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .edit-mode-indicator.edit {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        /* 페이지 매핑 입력 영역 */
+        .page-mapping-input {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-left: 10px;
+        }
+        
+        .page-mapping-input input {
+            width: 60px;
+            padding: 2px 6px;
+            font-size: 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 3px;
+            text-align: center;
+        }
+        
+        .page-mapping-input button {
+            padding: 2px 6px;
+            font-size: 11px;
+            border: 1px solid #0d6efd;
+            background: #0d6efd;
+            color: white;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        
+        .page-mapping-input button:hover {
+            background: #0b5ed7;
+        }
+        
+        .expand-toggle {
+            padding: 2px 6px;
+            border: 1px solid #dee2e6;
+            background: white;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .vacant-toggle {
+            padding: 3px 8px;
+            background: #ffc107;
+            color: #000;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        
+        .vacant-toggle.active {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .vacancy-list {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            background: white;
+        }
+        
+        .vacancy-list.expanded {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .vacancy-item {
+            padding: 10px 15px;
+            border-bottom: 1px solid #f8f9fa;
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .vacancy-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .vacancy-item.mapped {
+            background: #e7f5ff;
+        }
+        
+        .vacancy-item.no-vacancy {
+            background: #fff3cd;
+            font-style: italic;
+        }
+        
+        .vacancy-info {
+            flex: 1;
+        }
+        
+        .vacancy-floor {
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        .vacancy-area {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        /* 비교 뷰 */
+        .comparison-view {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #f0f8ff;
+            border: 1px solid #b6d4fe;
+            border-radius: 0 0 8px 8px;
+            padding: 10px;
+            display: none;
+            z-index: 10;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .comparison-view.active {
+            display: block;
+        }
+        
+        .comparison-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px;
+            font-size: 12px;
+        }
+        
+        .comparison-label {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .comparison-value {
+            color: #6c757d;
+        }
+        
+        /* Status 관리 */
+        .status-control-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .status-badge {
+            font-size: 11px;
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+        
+        .status-badge.active {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-badge.inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .status-badge.undefined {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .group-status-toggle {
+            padding: 2px 6px;
+            font-size: 10px;
+            border: 1px solid #dee2e6;
+            background: white;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        
+        /* 플로팅 색인 */
+        .floating-index {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 8px 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            min-height: 300px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        
+        .index-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .index-title {
+            font-size: 10px;
+            color: #6c757d;
+            font-weight: 600;
+            margin-bottom: 4px;
+            text-align: center;
+        }
+        
+        .index-char {
+            display: block;
+            width: 20px;
+            height: 20px;
+            line-height: 20px;
+            text-align: center;
+            font-size: 11px;
+            font-weight: 500;
+            color: #495057;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: all 0.2s;
+            margin: 1px 0;
+        }
+        
+        .index-char:hover {
+            background: #007bff;
+            color: white;
+            transform: scale(1.1);
+        }
+        
+        .index-char.active {
+            background: #007bff;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .index-char.disabled {
+            color: #ced4da;
+            cursor: not-allowed;
+        }
+        
+        .index-char.disabled:hover {
+            background: transparent;
+            color: #ced4da;
+            transform: none;
+        }
+        
+        .index-divider {
+            width: 16px;
+            height: 1px;
+            background: #dee2e6;
+            margin: 6px 0;
+        }
+
+        /* 중앙 패널 - PDF 뷰어 */
+        .center-panel {
+            flex: 1;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* PDF 썸네일 - 가로형 레이아웃 */
+        .pdf-thumbnails {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        
+        /* 빠른 페이지 이동 모달 */
+        .quick-page-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            z-index: 3000;
+            display: none;
+            min-width: 300px;
+        }
+        
+        .quick-page-modal.show {
+            display: block;
+            animation: fadeIn 0.2s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translate(-50%, -55%); }
+            to { opacity: 1; transform: translate(-50%, -50%); }
+        }
+        
+        .quick-page-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 2999;
+            display: none;
+        }
+        
+        .quick-page-modal-overlay.show {
+            display: block;
+        }
+        
+        .page-navigation-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        
+        .page-slider {
+            flex: 1;
+        }
+        
+        .current-page-indicator {
+            font-weight: bold;
+            color: #0d6efd;
+            min-width: 60px;
+            text-align: center;
+        }
+        
+        .pdf-thumbnails.grid-1 .pdf-thumbnail-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100%;
+        }
+        
+        .pdf-thumbnails.grid-4 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            align-content: start;
+        }
+        
+        .pdf-thumbnails.grid-10 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            align-content: start;
+        }
+        
+        .pdf-thumbnail {
+            border: 2px solid #dee2e6;
+            border-radius: 5px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: white;
+            position: relative;
+            aspect-ratio: 1.414;
+        }
+        
+        .pdf-thumbnail:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border-color: #0d6efd;
+            z-index: 10;
+        }
+        
+        .pdf-thumbnails.grid-1 .pdf-thumbnail:hover {
+            transform: scale(1.1);
+        }
+        
+        .pdf-thumbnail-hover-preview {
+            position: fixed;
+            display: none;
+            background: white;
+            border: 2px solid #0d6efd;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            z-index: 1000;
+            padding: 5px;
+            pointer-events: none;
+        }
+        
+        .pdf-thumbnail:hover .pdf-thumbnail-hover-preview {
+            display: block;
+        }
+        
+        .pdf-thumbnail.selected {
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+        }
+        
+        .pdf-thumbnail canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+        
+        .pdf-thumbnail-loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fa;
+        }
+        
+        .page-number {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px;
+            text-align: center;
+            font-size: 12px;
+        }
+        
+        /* 오른쪽 패널 - 매핑 정보 */
+        .right-panel {
+            flex: 0 0 380px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* 회사별 필터 - 셀렉트박스로 변경 */
+        .company-filter-section {
+            margin-bottom: 15px;
+        }
+        
+        .company-filter-select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            background: white;
+            font-size: 14px;
+        }
+        
+        .company-filter-select:focus {
+            outline: none;
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+        }
+        
+        /* 매핑 일괄 처리 컨트롤 */
+        .mapping-bulk-controls {
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        
+        .mapping-bulk-buttons {
+            display: flex;
+            gap: 5px;
+            margin-top: 8px;
+        }
+        
+        .mapping-bulk-btn {
+            flex: 1;
+            padding: 5px;
+            font-size: 11px;
+            border: 1px solid #dee2e6;
+            background: white;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        
+        .mapping-bulk-btn:hover {
+            background: #f8f9fa;
+        }
+        
+        /* 비교 모드 토글 */
+        .comparison-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            background: #f0f8ff;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        
+        /* 필터 컨트롤 - 정렬 기능 추가 */
+        .filter-controls {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .filter-section {
+            margin-bottom: 12px;
+        }
+        
+        .filter-section:last-child {
+            margin-bottom: 0;
+        }
+        
+        .filter-section-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 5px;
+        }
+        
+        .filter-buttons {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-btn {
+            padding: 5px 12px;
+            border: 1px solid #dee2e6;
+            background: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        
+        .filter-btn.active {
+            background: #0d6efd;
+            color: white;
+            border-color: #0d6efd;
+        }
+        
+        .sort-btn {
+            padding: 5px 12px;
+            border: 1px solid #dee2e6;
+            background: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .sort-btn:hover {
+            background: #f8f9fa;
+        }
+        
+        .sort-btn.active {
+            background: #17a2b8;
+            color: white;
+            border-color: #17a2b8;
+        }
+        
+        /* 로딩 스피너 */
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #0d6efd;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* 상태 메시지 */
+        .status-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 5px;
+            display: none;
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .status-message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status-message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        /* 파일 업로드 영역 */
+        .file-upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 5px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-bottom: 20px;
+        }
+        
+        .file-upload-area:hover {
+            border-color: #0d6efd;
+            background: #f8f9fa;
+        }
+        
+        .file-upload-area.dragover {
+            border-color: #0d6efd;
+            background: #e7f3ff;
+        }
+        
+        /* 매핑 정보 - 높이 확장 */
+        .mapping-info {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 500px;
+            min-height: 400px;
+        }
+        
+        .mapping-file-group {
+            margin-bottom: 20px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .mapping-file-header {
+            background: #f8f9fa;
+            padding: 12px 15px;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .mapping-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #f8f9fa;
+            font-size: 14px;
+            position: relative;
+        }
+        
+        .mapping-item.filtered-out {
+            display: none;
+        }
+        
+        .mapping-item:last-child {
+            border-bottom: none;
+        }
+        
+        .mapping-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .mapping-item-checkbox {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        
+        .mapping-item-content {
+            margin-left: 30px;
+        }
+        
+        /* 버튼 그룹 */
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .button-group button {
+            flex: 1;
+        }
+
+        /* 디버그 정보 */
+        .debug-info {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        /* 중복 공실 표시 */
+        .duplicate-vacancy-warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 8px 12px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- 헤더 -->
+        <div class="header">
+            <h2><i class="bi bi-file-earmark-pdf"></i> PDF 페이지 매핑 도구 - Fixed Version</h2>
+            <p class="text-muted mb-0">빌딩 정보와 PDF 페이지를 효율적으로 연결하고 관리합니다.</p>
+        </div>
+        
+        <!-- 상태 메시지 -->
+        <div class="status-message" id="statusMessage"></div>
+        
+        <!-- 플로팅 신규 빌딩 추가 버튼 -->
+        <div class="floating-add-building" onclick="openNewBuildingModal()">
+            <i class="bi bi-plus-lg"></i>
+            <span class="tooltip-text">신규 빌딩 추가</span>
+        </div>
+        
+        <div class="content-wrapper">
+            <!-- 왼쪽 패널 - 빌딩 목록 -->
+            <div class="left-panel">
+                <h5 class="mb-3">빌딩 & 공실 목록</h5>
+                
+                <!-- 플로팅 색인 -->
+                <div class="floating-index" id="floatingIndex">
+                    <div class="index-section">
+                        <div class="index-title">가나다</div>
+                        <span class="index-char" data-char="ㄱ" onclick="scrollToIndex('ㄱ')">ㄱ</span>
+                        <span class="index-char" data-char="ㄴ" onclick="scrollToIndex('ㄴ')">ㄴ</span>
+                        <span class="index-char" data-char="ㄷ" onclick="scrollToIndex('ㄷ')">ㄷ</span>
+                        <span class="index-char" data-char="ㄹ" onclick="scrollToIndex('ㄹ')">ㄹ</span>
+                        <span class="index-char" data-char="ㅁ" onclick="scrollToIndex('ㅁ')">ㅁ</span>
+                        <span class="index-char" data-char="ㅂ" onclick="scrollToIndex('ㅂ')">ㅂ</span>
+                        <span class="index-char" data-char="ㅅ" onclick="scrollToIndex('ㅅ')">ㅅ</span>
+                        <span class="index-char" data-char="ㅇ" onclick="scrollToIndex('ㅇ')">ㅇ</span>
+                        <span class="index-char" data-char="ㅈ" onclick="scrollToIndex('ㅈ')">ㅈ</span>
+                        <span class="index-char" data-char="ㅊ" onclick="scrollToIndex('ㅊ')">ㅊ</span>
+                        <span class="index-char" data-char="ㅋ" onclick="scrollToIndex('ㅋ')">ㅋ</span>
+                        <span class="index-char" data-char="ㅌ" onclick="scrollToIndex('ㅌ')">ㅌ</span>
+                        <span class="index-char" data-char="ㅍ" onclick="scrollToIndex('ㅍ')">ㅍ</span>
+                        <span class="index-char" data-char="ㅎ" onclick="scrollToIndex('ㅎ')">ㅎ</span>
+                    </div>
+                    
+                    <div class="index-divider"></div>
+                    
+                    <div class="index-section">
+                        <div class="index-title">ABC</div>
+                        <span class="index-char" data-char="A" onclick="scrollToIndex('A')">A</span>
+                        <span class="index-char" data-char="B" onclick="scrollToIndex('B')">B</span>
+                        <span class="index-char" data-char="C" onclick="scrollToIndex('C')">C</span>
+                        <span class="index-char" data-char="D" onclick="scrollToIndex('D')">D</span>
+                        <span class="index-char" data-char="E" onclick="scrollToIndex('E')">E</span>
+                        <span class="index-char" data-char="F" onclick="scrollToIndex('F')">F</span>
+                        <span class="index-char" data-char="G" onclick="scrollToIndex('G')">G</span>
+                        <span class="index-char" data-char="H" onclick="scrollToIndex('H')">H</span>
+                        <span class="index-char" data-char="I" onclick="scrollToIndex('I')">I</span>
+                        <span class="index-char" data-char="J" onclick="scrollToIndex('J')">J</span>
+                        <span class="index-char" data-char="K" onclick="scrollToIndex('K')">K</span>
+                        <span class="index-char" data-char="L" onclick="scrollToIndex('L')">L</span>
+                        <span class="index-char" data-char="M" onclick="scrollToIndex('M')">M</span>
+                        <span class="index-char" data-char="N" onclick="scrollToIndex('N')">N</span>
+                        <span class="index-char" data-char="O" onclick="scrollToIndex('O')">O</span>
+                        <span class="index-char" data-char="P" onclick="scrollToIndex('P')">P</span>
+                        <span class="index-char" data-char="Q" onclick="scrollToIndex('Q')">Q</span>
+                        <span class="index-char" data-char="R" onclick="scrollToIndex('R')">R</span>
+                        <span class="index-char" data-char="S" onclick="scrollToIndex('S')">S</span>
+                        <span class="index-char" data-char="T" onclick="scrollToIndex('T')">T</span>
+                        <span class="index-char" data-char="U" onclick="scrollToIndex('U')">U</span>
+                        <span class="index-char" data-char="V" onclick="scrollToIndex('V')">V</span>
+                        <span class="index-char" data-char="W" onclick="scrollToIndex('W')">W</span>
+                        <span class="index-char" data-char="X" onclick="scrollToIndex('X')">X</span>
+                        <span class="index-char" data-char="Y" onclick="scrollToIndex('Y')">Y</span>
+                        <span class="index-char" data-char="Z" onclick="scrollToIndex('Z')">Z</span>
+                    </div>
+                </div>
+                
+                <!-- 디버그 정보 -->
+                <div class="debug-info" id="debugInfo">
+                    데이터 로드 상태를 확인하세요.
+                </div>
+                
+                <!-- 데이터 로드 섹션 -->
+                <div class="data-load-section">
+                    <h6 class="mb-3">데이터 관리</h6>
+                    
+                    <!-- Excel 데이터 상태 -->
+                    <div class="data-status" id="excelDataStatus">
+                        <i class="bi bi-file-earmark-excel"></i>
+                        <span>Excel 데이터</span>
+                        <input type="file" class="form-control form-control-sm ms-auto" 
+                               id="excelDataInput" accept=".json" style="width: 200px;">
+                    </div>
+                    
+                    <!-- 매핑 데이터 상태 -->
+                    <div class="data-status" id="mappingDataStatus">
+                        <i class="bi bi-diagram-3"></i>
+                        <span>매핑 데이터</span>
+                        <input type="file" class="form-control form-control-sm ms-auto" 
+                               id="mappingDataInput" accept=".json" style="width: 200px;">
+                    </div>
+                    
+                    <!-- 자동 저장 토글 -->
+                    <div class="form-check form-switch mt-2">
+                        <input class="form-check-input" type="checkbox" id="autoSaveToggle" checked>
+                        <label class="form-check-label" for="autoSaveToggle">
+                            변경사항 자동 저장
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- 백업 관리 섹션 -->
+                <div class="backup-section">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="fw-bold small">백업 관리</span>
+                        <span class="badge bg-info" id="backupCount">0개</span>
+                    </div>
+                    <div class="backup-controls">
+                        <button class="btn btn-sm btn-primary" onclick="createBackup()">
+                            <i class="bi bi-save2"></i> 백업
+                        </button>
+                        <button class="btn btn-sm btn-secondary" onclick="restoreBackup()">
+                            <i class="bi bi-arrow-clockwise"></i> 복원
+                        </button>
+                        <button class="btn btn-sm btn-warning" onclick="compareWithBackup()">
+                            <i class="bi bi-arrows-diff"></i> 비교
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 회사 선택 -->
+                <div class="mb-3">
+                    <label for="companySelect" class="form-label">회사 선택</label>
+                    <select class="form-select" id="companySelect">
+                        <option value="">전체 회사</option>
+                    </select>
+                </div>
+                
+                <!-- 검색 입력 필드 -->
+                <div class="search-input-section">
+                    <div class="search-input">
+                        <input type="text" id="mainBuildingSearchInput" placeholder="빌딩명 또는 주소로 검색..." 
+                               onkeyup="searchBuildings()" autocomplete="off">
+                        <i class="bi bi-search search-icon"></i>
+                    </div>
+                    <div class="search-results-count" id="searchResultsCount"></div>
+                </div>
+                
+                <!-- 필터 컨트롤 - 정렬 기능 추가 -->
+                <div class="filter-controls">
+                    <div class="filter-section">
+                        <div class="filter-section-label">매핑 상태</div>
+                        <div class="filter-buttons">
+                            <button class="filter-btn active" data-filter="all">
+                                <i class="bi bi-list"></i> 전체
+                            </button>
+                            <button class="filter-btn" data-filter="unmapped">
+                                <i class="bi bi-circle"></i> 미매칭
+                            </button>
+                            <button class="filter-btn" data-filter="mapped">
+                                <i class="bi bi-check-circle"></i> 매칭완료
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-section">
+                        <div class="filter-section-label">노출 상태</div>
+                        <div class="filter-buttons">
+                            <button class="filter-btn active" data-status-filter="all">
+                                <i class="bi bi-eye"></i> 전체
+                            </button>
+                            <button class="filter-btn" data-status-filter="active">
+                                <i class="bi bi-check-circle text-success"></i> 노출
+                            </button>
+                            <button class="filter-btn" data-status-filter="inactive">
+                                <i class="bi bi-x-circle text-danger"></i> 비노출
+                            </button>
+                            <button class="filter-btn" data-status-filter="undefined">
+                                <i class="bi bi-question-circle text-warning"></i> 미설정
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-section">
+                        <div class="filter-section-label">정렬</div>
+                        <div class="filter-buttons">
+                            <button class="sort-btn active" data-sort="name" onclick="sortBuildings('name')">
+                                <i class="bi bi-sort-alpha-down"></i> 이름순
+                            </button>
+                            <button class="sort-btn" data-sort="page-asc" onclick="sortBuildings('page-asc')">
+                                <i class="bi bi-sort-numeric-down"></i> 페이지↑
+                            </button>
+                            <button class="sort-btn" data-sort="page-desc" onclick="sortBuildings('page-desc')">
+                                <i class="bi bi-sort-numeric-up"></i> 페이지↓
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 전체 선택 컨트롤 -->
+                <div class="select-all-controls" id="selectAllControls" style="display: none;">
+                    <div class="select-all-checkbox">
+                        <input type="checkbox" id="selectAllCheckbox" class="form-check-input">
+                        <label for="selectAllCheckbox">전체 선택</label>
+                    </div>
+                    <div class="bulk-status-buttons">
+                        <button class="bulk-status-btn" onclick="bulkUpdateAllStatus('active')">
+                            <i class="bi bi-eye"></i> 일괄 노출
+                        </button>
+                        <button class="bulk-status-btn" onclick="bulkUpdateAllStatus('inactive')">
+                            <i class="bi bi-x"></i> 일괄 비노출
+                        </button>
+                        <button class="bulk-status-btn vacant" onclick="bulkVacantProcess()">
+                            <i class="bi bi-house-slash"></i> 일괄 공실처리
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 빌딩 리스트 -->
+                <div class="building-list" id="buildingList">
+                    <p class="text-muted text-center">데이터를 로드하세요.</p>
+                </div>
+            </div>
+            
+            <!-- 중앙 패널 - PDF 뷰어 -->
+            <div class="center-panel">
+                <h5 class="mb-3">PDF 페이지</h5>
+                
+                <!-- PDF 업로드 -->
+                <div class="file-upload-area" id="pdfUploadArea">
+                    <i class="bi bi-cloud-upload" style="font-size: 48px; color: #6c757d;"></i>
+                    <p class="mt-3 mb-1">PDF 파일을 드래그하거나 클릭하여 업로드</p>
+                    <p class="text-muted small">회사를 먼저 선택하세요.</p>
+                    <input type="file" id="pdfInput" accept=".pdf" style="display: none;">
+                </div>
+                
+                <!-- PDF 컨트롤 -->
+                <div class="pdf-controls" id="pdfControls" style="display: none;">
+                    <div>
+                        <span id="pdfFileName" class="fw-bold"></span>
+                        <span class="text-muted ms-2">(<span id="totalPages">0</span>페이지)</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <input type="radio" class="btn-check" name="viewMode" id="view1" value="1" checked>
+                            <label class="btn btn-outline-secondary" for="view1">1개</label>
+                            
+                            <input type="radio" class="btn-check" name="viewMode" id="view4" value="4">
+                            <label class="btn btn-outline-secondary" for="view4">4개</label>
+                            
+                            <input type="radio" class="btn-check" name="viewMode" id="view10" value="10">
+                            <label class="btn btn-outline-secondary" for="view10">10개</label>
+                        </div>
+                        
+                        <!-- Go to Page 기능 추가 -->
+                        <div class="d-flex align-items-center gap-2">
+                            <label class="small text-muted mb-0">페이지:</label>
+                            <input type="number" id="goToPageInput" class="form-control form-control-sm" 
+                                   style="width: 70px;" min="1" placeholder="번호">
+                            <button class="btn btn-sm btn-primary" onclick="goToSpecificPage()">
+                                <i class="bi bi-arrow-right-circle"></i> 이동
+                            </button>
+                            <span class="text-muted small">(Ctrl+G)</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- PDF 썸네일 -->
+                <div class="pdf-thumbnails grid-1" id="pdfThumbnails">
+                    <!-- 썸네일이 여기에 렌더링됩니다 -->
+                </div>
+                
+                <!-- 페이지 네비게이션 바 -->
+                <div class="page-navigation-bar" id="pageNavigationBar" style="display: none;">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="goToPreviousPage()">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <input type="range" class="form-range page-slider" id="pageSlider" 
+                           min="1" value="1" onchange="goToSliderPage()">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="goToNextPage()">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                    <span class="current-page-indicator" id="currentPageIndicator">1/1</span>
+                </div>
+                
+                <!-- 페이지네이션 -->
+                <div class="pdf-pagination" id="pdfPagination" style="display: none;">
+                    <nav>
+                        <ul class="pagination pagination-sm justify-content-center mb-2"></ul>
+                    </nav>
+                </div>
+            </div>
+            
+            <!-- 오른쪽 패널 - 매핑 정보 -->
+            <div class="right-panel">
+                <h5 class="mb-3">매핑 정보</h5>
+                
+                <!-- 비교 모드 토글 -->
+                <div class="comparison-toggle">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="comparisonMode">
+                        <label class="form-check-label" for="comparisonMode">
+                            이전 상태 비교 모드
+                        </label>
+                    </div>
+                    <span class="badge bg-secondary" id="comparisonBadge">OFF</span>
+                </div>
+                
+                <!-- 회사별 필터 - 셀렉트박스로 변경 -->
+                <div class="company-filter-section">
+                    <label for="companyFilterSelect" class="form-label">회사별 필터</label>
+                    <select class="company-filter-select" id="companyFilterSelect" onchange="filterByCompany(this.value)">
+                        <option value="all">전체 회사 (0)</option>
+                    </select>
+                </div>
+                
+                <!-- 매핑 일괄 처리 컨트롤 -->
+                <div class="mapping-bulk-controls">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <label>
+                            <input type="checkbox" id="selectAllMappings" class="form-check-input">
+                            전체 선택
+                        </label>
+                        <span class="text-muted small">선택된 항목</span>
+                    </div>
+                    <div class="mapping-bulk-buttons">
+                        <button class="mapping-bulk-btn" onclick="bulkRemoveMappings()">
+                            <i class="bi bi-trash"></i> 일괄 삭제
+                        </button>
+                        <button class="mapping-bulk-btn" onclick="bulkUpdateMappingStatus('active')">
+                            <i class="bi bi-eye"></i> 노출
+                        </button>
+                        <button class="mapping-bulk-btn" onclick="bulkUpdateMappingStatus('inactive')">
+                            <i class="bi bi-x"></i> 비노출
+                        </button>
+                        <button class="mapping-bulk-btn" onclick="bulkUpdateMappingStatus('undefined')">
+                            <i class="bi bi-question"></i> 미설정
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 현재 선택 정보 -->
+                <div class="mb-3">
+                    <label class="form-label">현재 선택</label>
+                    <div class="p-3 bg-light rounded">
+                        <div><strong>빌딩:</strong> <span id="selectedBuilding">-</span></div>
+                        <div><strong>페이지:</strong> <span id="selectedPage">-</span></div>
+                    </div>
+                </div>
+                
+                <!-- 매핑 목록 - 높이 확장 -->
+                <label class="form-label">매핑된 빌딩 <span class="text-muted" id="mappingCount">(0건)</span></label>
+                <div class="mapping-info" id="mappingInfo">
+                    <p class="text-muted text-center small">매핑된 정보가 없습니다.</p>
+                </div>
+                
+                <!-- 버튼 그룹 -->
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="saveMapping()">
+                        <i class="bi bi-save"></i> 저장
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportMapping()">
+                        <i class="bi bi-download"></i> 매핑 내보내기
+                    </button>
+                    <button class="btn btn-success" onclick="exportExcelData()">
+                        <i class="bi bi-file-earmark-excel"></i> Excel 데이터
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 호버 프리뷰용 컨테이너 -->
+    <div class="pdf-thumbnail-hover-preview" id="hoverPreview"></div>
+    
+    <!-- 빠른 페이지 이동 모달 -->
+    <div class="quick-page-modal-overlay" id="quickPageOverlay" onclick="closeQuickPageModal()"></div>
+    <div class="quick-page-modal" id="quickPageModal">
+        <h5 class="mb-3">페이지로 이동</h5>
+        <div class="mb-3">
+            <label class="form-label">페이지 번호 입력 (1 - <span id="maxPageNumber">1</span>)</label>
+            <input type="number" class="form-control" id="quickPageInput" 
+                   min="1" placeholder="페이지 번호">
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary flex-fill" onclick="quickGoToPage()">
+                <i class="bi bi-arrow-right-circle"></i> 이동
+            </button>
+            <button class="btn btn-secondary flex-fill" onclick="closeQuickPageModal()">
+                취소
+            </button>
+        </div>
+    </div>
+    
+    <!-- 빌딩 편집/신규 추가 모달 -->
+    <div class="building-edit-modal" id="buildingEditModal" onclick="closeBuildingEditModal(event)">
+        <div class="building-edit-content" onclick="event.stopPropagation()">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">빌딩 정보 관리</h5>
+                <button type="button" class="btn-close" onclick="closeBuildingEditModal()"></button>
+            </div>
+            
+            <!-- 모드 표시 -->
+            <div class="edit-mode-indicator" id="editModeIndicator">
+                <i class="bi bi-plus-circle me-2"></i>신규 빌딩 추가
+            </div>
+            
+            <!-- 빌딩 복사 섹션 (신규 추가 시에만 표시) -->
+            <div class="building-copy-section" id="buildingCopySection" style="display: none;">
+                <h6 class="mb-3">
+                    <i class="bi bi-files me-2"></i>기존 빌딩에서 복사
+                </h6>
+                <input type="text" class="building-search-input" id="modalBuildingSearchInput" 
+                       placeholder="빌딩명 또는 주소로 검색..." oninput="searchBuildingsForCopy()">
+                <div class="building-search-results" id="buildingSearchResults">
+                    <!-- 검색 결과가 여기에 표시됩니다 -->
+                </div>
+                <div class="vacancy-checkbox-list" id="vacancyCheckboxList" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong>공실 선택</strong>
+                        <button class="btn btn-sm btn-outline-primary" onclick="toggleAllVacancies()">
+                            전체 선택/해제
+                        </button>
+                    </div>
+                    <div id="vacancyCheckboxItems">
+                        <!-- 공실 체크박스가 여기에 표시됩니다 -->
+                    </div>
+                </div>
+            </div>
+            
+            <form id="buildingEditForm">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="editBuildingName" class="form-label">빌딩명 *</label>
+                        <input type="text" class="form-control" id="editBuildingName" required>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="editBuildingCompany" class="form-label">회사 *</label>
+                        <select class="form-select" id="editBuildingCompany" required>
+                            <option value="">회사 선택</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="editBuildingAddress" class="form-label">주소</label>
+                    <input type="text" class="form-control" id="editBuildingAddress" placeholder="예: 서울시 강남구 테헤란로 123">
+                </div>
+                
+                <div class="mb-3">
+                    <label for="editNearbyStation" class="form-label">인근역</label>
+                    <input type="text" class="form-control" id="editNearbyStation" placeholder="예: 강남역 3번 출구 도보 5분">
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="editBuildingStatus" class="form-label">빌딩 상태</label>
+                        <select class="form-select" id="editBuildingStatus">
+                            <option value="undefined">미설정</option>
+                            <option value="active">노출</option>
+                            <option value="inactive">비노출</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <label class="form-label mb-0">공실 정보</label>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-outline-success" onclick="copyExistingVacancies()">
+                                <i class="bi bi-files"></i> 다른 회사에서 복사
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addNewVacancy()">
+                                <i class="bi bi-plus-circle"></i> 공실 추가
+                            </button>
+                        </div>
+                    </div>
+                    <div id="vacancyEditList">
+                        <!-- 공실 정보가 여기에 동적으로 추가됩니다 -->
+                    </div>
+                </div>
+                
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-fill">
+                        <i class="bi bi-save"></i> 저장
+                    </button>
+                    <button type="button" class="btn btn-secondary flex-fill" onclick="closeBuildingEditModal()">
+                        취소
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+    // 전역 변수
+    let excelData = null;
+    let mappingData = {};
+    let backupData = [];
+    let pdfDoc = null;
+    let selectedCompany = '';
+    let selectedBuilding = null;
+    let selectedPage = null;
+    let currentPage = 1;
+    let itemsPerPage = 1;
+    let currentFilter = 'all';
+    let currentStatusFilter = 'all';
+    let currentCompanyFilter = 'all';
+    let currentSort = 'name';
+    let searchQuery = '';
+    let autoSave = true;
+    let expandedGroups = new Set();
+    let comparisonMode = false;
+    let vacantBuildings = new Set();
+    let editingBuildingKey = null;
+    let isNewBuildingMode = false;
+    let selectedCopyBuilding = null;
+    let selectedCopyVacancies = [];
+    
+    // 초기화
+    document.addEventListener('DOMContentLoaded', () => {
+        setupEventListeners();
+        checkDataStatus();
+        loadBackups();
+        updateDebugInfo();
+        // localStorage에서 저장된 데이터 복원
+        loadSavedData();
+    });
+
+    // 저장된 데이터 로드
+    function loadSavedData() {
+        const savedExcelData = localStorage.getItem('excelData');
+        const savedMappingData = localStorage.getItem('mappingData');
+        const savedVacantBuildings = localStorage.getItem('vacantBuildings');
+
+        if (savedExcelData) {
+            try {
+                excelData = JSON.parse(savedExcelData);
+                console.log('저장된 Excel 데이터 로드됨:', excelData);
+                
+                if (excelData) {
+                    const companies = extractCompanies(excelData);
+                    updateCompanySelect(Array.from(companies).sort());
+                    updateCompanyFilterOptions();
+                    displayBuildingGroups();
+                }
+            } catch (error) {
+                console.error('저장된 Excel 데이터 로드 실패:', error);
+            }
+        }
+
+        if (savedMappingData) {
+            try {
+                mappingData = JSON.parse(savedMappingData);
+                console.log('저장된 매핑 데이터 로드됨:', mappingData);
+                updateMappingDisplay();
+                updateCompanyMappingCounts();
+            } catch (error) {
+                console.error('저장된 매핑 데이터 로드 실패:', error);
+            }
+        }
+
+        if (savedVacantBuildings) {
+            try {
+                const vacantArray = JSON.parse(savedVacantBuildings);
+                vacantBuildings = new Set(vacantArray);
+                console.log('저장된 공실 처리 상태 로드됨:', vacantBuildings);
+            } catch (error) {
+                console.error('저장된 공실 처리 상태 로드 실패:', error);
+            }
+        }
+
+        checkDataStatus();
+        updateDebugInfo();
+    }
+
+    // 디버그 정보 업데이트
+    function updateDebugInfo() {
+        const debugEl = document.getElementById('debugInfo');
+        let info = `Excel 데이터: ${excelData ? '로드됨' : '없음'}`;
+        
+        if (excelData) {
+            let buildingCount = 0;
+            let vacancyCount = 0;
+            
+            if (excelData.buildings) buildingCount = excelData.buildings.length;
+            if (excelData.vacancies) vacancyCount = excelData.vacancies.length;
+            
+            info += ` | 빌딩: ${buildingCount}개, 공실: ${vacancyCount}개`;
+        }
+        
+        const mappingCount = Object.keys(mappingData).length;
+        info += ` | 매핑: ${mappingCount}개 파일`;
+        
+        debugEl.textContent = info;
+    }
+    
+    // 빌딩명 정규화 함수 - 특수문자 및 공백 처리
+    function normalizeBuildingName(name) {
+        if (!name) return '';
+        
+        return name
+            .trim()
+            .replace(/[\u200B-\u200D\uFEFF]/g, '') // 보이지 않는 문자 제거 (Zero width space 등)
+            .replace(/\s+/g, ' ') // 연속된 공백을 하나로
+            .replace(/[^\w\s가-힣\u3131-\u3163\u1100-\u11FF]/g, '') // 특수문자 제거 (한글, 영어, 숫자, 공백만 유지)
+            .trim();
+    }
+    
+    // 다양한 필드명을 고려한 빌딩명 추출 - 정규화 포함
+    function getBuildingName(item) {
+        if (!item) return '';
+        
+        const possibleFields = [
+            '빌딩명', 'buildingName', 'name', '빌딩 명', 'building_name', 
+            '건물명', '건물', '빌딩', 'building', 'Building', '상호명'
+        ];
+        
+        for (const field of possibleFields) {
+            if (item[field] && typeof item[field] === 'string') {
+                const normalized = normalizeBuildingName(item[field]);
+                if (normalized) return normalized;
+            }
+        }
+        
+        return '';
+    }
+    
+    // 다양한 필드명을 고려한 회사명 추출
+    function getCompanyName(item) {
+        if (!item) return '';
+        
+        const possibleFields = [
+            '출처회사', 'company', '회사명', '회사', 'source', 'sourceName', 
+            '업체명', '중개사', '업체', 'companyName', 'Company'
+        ];
+        
+        for (const field of possibleFields) {
+            if (item[field] && typeof item[field] === 'string') {
+                return item[field].trim();
+            }
+        }
+        
+        return '';
+    }
+    
+    // 다양한 필드명을 고려한 주소 추출
+    function getAddress(item) {
+        if (!item) return '';
+        
+        const possibleFields = [
+            '주소', 'address', 'addr', '주 소', 'location', 
+            '위치', '소재지', 'Address'
+        ];
+        
+        for (const field of possibleFields) {
+            if (item[field] && typeof item[field] === 'string') {
+                return item[field].trim();
+            }
+        }
+        
+        return '';
+    }
+    
+    // 다양한 필드명을 고려한 인근역 추출
+    function getNearbyStation(item) {
+        if (!item) return '';
+        
+        const possibleFields = [
+            '인근역', 'nearbyStation', 'station', 'subway', 'nearStation', '인근 역',
+            '최인접역', '지하철역', '역세권', '교통'
+        ];
+        
+        for (const field of possibleFields) {
+            if (item[field] && typeof item[field] === 'string') {
+                return item[field].trim();
+            }
+        }
+        
+        return '';
+    }
+    
+    // 다양한 필드명을 고려한 층 추출
+    function getFloor(vacancy) {
+        if (!vacancy) return '';
+        
+        const possibleFields = [
+            '층', 'floor', '해당층', 'flr', '층수', 'level', 
+            'Floor', '위치층', '공실층'
+        ];
+        
+        for (const field of possibleFields) {
+            if (vacancy[field] !== undefined && vacancy[field] !== null) {
+                return String(vacancy[field]).trim();
+            }
+        }
+        
+        return '';
+    }
+    
+    // 다양한 필드명을 고려한 전용면적 추출
+    function getArea(vacancy) {
+        if (!vacancy) return '';
+        
+        const possibleFields = [
+            '전용면적', 'area', '전용 면적', 'exclusiveArea', 'size',
+            '면적', 'Area', '공실전용면적', '전용면적(평)'
+        ];
+        
+        for (const field of possibleFields) {
+            if (vacancy[field] !== undefined && vacancy[field] !== null) {
+                return String(vacancy[field]).trim();
+            }
+        }
+        
+        return '';
+    }
+    
+    // 다양한 필드명을 고려한 임대면적 추출
+    function getRentalArea(vacancy) {
+        if (!vacancy) return '';
+        
+        const possibleFields = [
+            '임대면적', 'rentalArea', '임대 면적', 'rentArea', 'leaseArea',
+            '공급면적', 'supplyArea', '공실임대면적', '임대면적(평)', 'rentableArea'
+        ];
+        
+        for (const field of possibleFields) {
+            if (vacancy[field] !== undefined && vacancy[field] !== null) {
+                return String(vacancy[field]).trim();
+            }
+        }
+        
+        return '';
+    }
+    
+    // 중복 공실 제거 함수 - 개선된 버전
+    function removeDuplicateVacancies(vacancies) {
+        const uniqueVacancies = [];
+        const seenVacancies = new Set();
+        
+        vacancies.forEach(vacancy => {
+            const floor = getFloor(vacancy);
+            const area = getArea(vacancy);
+            const rentalArea = getRentalArea(vacancy);
+            
+            // 층, 전용면적, 임대면적을 조합하여 고유 키 생성
+            const key = `${floor}_${area}_${rentalArea}`.toLowerCase();
+            
+            if (!seenVacancies.has(key)) {
+                seenVacancies.add(key);
+                uniqueVacancies.push(vacancy);
+            } else {
+                console.log('중복 공실 제거:', vacancy);
+            }
+        });
+        
+        return uniqueVacancies;
+    }
+    
+    // 빌딩 검색 함수 - 메인 검색 필드용
+    function searchBuildings() {
+        searchQuery = document.getElementById('mainBuildingSearchInput').value.toLowerCase().trim();
+        displayBuildingGroups();
+        updateSearchResultsCount();
+    }
+    
+    // 검색 결과 개수 업데이트
+    function updateSearchResultsCount() {
+        const visibleGroups = document.querySelectorAll('.building-group:not([style*="display: none"])');
+        const totalGroups = document.querySelectorAll('.building-group').length;
+        const resultCountEl = document.getElementById('searchResultsCount');
+        
+        if (searchQuery) {
+            resultCountEl.textContent = `${visibleGroups.length}개 중 ${visibleGroups.length}개 표시`;
+        } else if (totalGroups > 0) {
+            resultCountEl.textContent = `총 ${totalGroups}개 빌딩`;
+        } else {
+            resultCountEl.textContent = '';
+        }
+    }
+    
+    // 검색어와 매칭하는지 확인
+    function isMatchingSearch(group) {
+        if (!searchQuery) return true;
+        
+        const buildingName = group.buildingName.toLowerCase();
+        const address = (group.address || '').toLowerCase();
+        const nearbyStation = (group.nearbyStation || '').toLowerCase();
+        
+        return buildingName.includes(searchQuery) || 
+               address.includes(searchQuery) || 
+               nearbyStation.includes(searchQuery);
+    }
+    
+    // 빌딩 정렬 함수
+    function sortBuildings(sortType) {
+        currentSort = sortType;
+        
+        // 정렬 버튼 UI 업데이트
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelector(`[data-sort="${sortType}"]`).classList.add('active');
+        
+        displayBuildingGroups();
+    }
+    
+    // 빌딩 삭제 함수 - 개선된 버전 (deletedCount 계산 수정)
+    function deleteBuilding(buildingName, company) {
+        const normalizedName = normalizeBuildingName(buildingName);
+        
+        if (!confirm(`"${buildingName}" 빌딩과 연결된 모든 공실을 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
+            return;
+        }
+        
+        let deletedCount = 0;
+        
+        try {
+            // 1. Excel 데이터에서 빌딩과 공실 삭제
+            if (excelData) {
+                // 빌딩 데이터 삭제
+                if (excelData.buildings && Array.isArray(excelData.buildings)) {
+                    const originalLength = excelData.buildings.length;
+                    excelData.buildings = excelData.buildings.filter(building => {
+                        const bName = getBuildingName(building);
+                        const bCompany = getCompanyName(building);
+                        const normalizedBName = normalizeBuildingName(bName);
+                        return !(normalizedBName === normalizedName && bCompany === company);
+                    });
+                    deletedCount += originalLength - excelData.buildings.length;
+                }
+                
+                // 공실 데이터 삭제
+                if (excelData.vacancies && Array.isArray(excelData.vacancies)) {
+                    const originalLength = excelData.vacancies.length;
+                    excelData.vacancies = excelData.vacancies.filter(vacancy => {
+                        const vName = getBuildingName(vacancy);
+                        const vCompany = getCompanyName(vacancy);
+                        const normalizedVName = normalizeBuildingName(vName);
+                        return !(normalizedVName === normalizedName && vCompany === company);
+                    });
+                    deletedCount += originalLength - excelData.vacancies.length;
+                }
+                
+                // 배열 자체가 데이터인 경우 처리 (수정됨)
+                if (Array.isArray(excelData) && !excelData.buildings && !excelData.vacancies) {
+                    const originalData = [...excelData]; // 원본 참조 보존
+                    
+                    // 삭제할 항목들 찾기
+                    const itemsToDelete = originalData.filter(item => {
+                        const iName = getBuildingName(item);
+                        const iCompany = getCompanyName(item);
+                        const normalizedIName = normalizeBuildingName(iName);
+                        return normalizedIName === normalizedName && iCompany === company;
+                    });
+                    
+                    // 실제 삭제
+                    for (let i = excelData.length - 1; i >= 0; i--) {
+                        const item = excelData[i];
+                        const iName = getBuildingName(item);
+                        const iCompany = getCompanyName(item);
+                        const normalizedIName = normalizeBuildingName(iName);
+                        
+                        if (normalizedIName === normalizedName && iCompany === company) {
+                            excelData.splice(i, 1);
+                            deletedCount++;
+                        }
+                    }
+                }
+            }
+            
+            // 2. 매핑 데이터에서 해당 빌딩 정보 삭제
+            Object.keys(mappingData).forEach(fileName => {
+                const fileData = mappingData[fileName];
+                if (fileData.company === company) {
+                    for (const buildingKey in fileData.buildings) {
+                        if (normalizeBuildingName(buildingKey) === normalizedName) {
+                            delete fileData.buildings[buildingKey];
+                            break;
+                        }
+                    }
+                    
+                    // 빌딩이 없으면 파일 데이터도 삭제
+                    if (Object.keys(fileData.buildings).length === 0) {
+                        delete mappingData[fileName];
+                    }
+                }
+            });
+            
+            // 3. 공실 처리 상태 제거
+            const vacantKey = `${normalizedName}_${company}`;
+            vacantBuildings.delete(vacantKey);
+            
+            // 4. UI 업데이트
+            displayBuildingGroups();
+            updateMappingDisplay();
+            updateCompanyMappingCounts();
+            updateCompanyFilterOptions();
+            updateDebugInfo();
+            
+            // 5. 자동 저장
+            if (autoSave) {
+                saveMapping();
+            }
+            
+            showStatus(`"${buildingName}" 빌딩이 삭제되었습니다. (${deletedCount}개 항목 삭제됨)`, 'success');
+            
+        } catch (error) {
+            console.error('빌딩 삭제 중 오류 발생:', error);
+            showStatus('빌딩 삭제 중 오류가 발생했습니다.', 'error');
+        }
+    }
+    
+    // 이벤트 리스너 설정
+    function setupEventListeners() {
+        // Excel 데이터 업로드
+        document.getElementById('excelDataInput').addEventListener('change', handleExcelDataUpload);
+        
+        // 매핑 데이터 업로드
+        document.getElementById('mappingDataInput').addEventListener('change', handleMappingDataUpload);
+        
+        // 자동 저장 토글
+        document.getElementById('autoSaveToggle').addEventListener('change', (e) => {
+            autoSave = e.target.checked;
+            if (autoSave) {
+                saveMapping();
+            }
+        });
+        
+        // 비교 모드 토글
+        document.getElementById('comparisonMode').addEventListener('change', (e) => {
+            comparisonMode = e.target.checked;
+            document.getElementById('comparisonBadge').textContent = comparisonMode ? 'ON' : 'OFF';
+            document.getElementById('comparisonBadge').className = comparisonMode ? 'badge bg-success' : 'badge bg-secondary';
+            displayBuildingGroups();
+        });
+        
+        // 회사 선택
+        document.getElementById('companySelect').addEventListener('change', handleCompanyChange);
+        
+        // 필터 버튼들
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', handleFilterChange);
+        });
+        
+        // 전체 선택 체크박스
+        document.getElementById('selectAllCheckbox').addEventListener('change', handleSelectAll);
+        document.getElementById('selectAllMappings').addEventListener('change', handleSelectAllMappings);
+        
+        // 뷰 모드 변경
+        document.querySelectorAll('input[name="viewMode"]').forEach(radio => {
+            radio.addEventListener('change', handleViewModeChange);
+        });
+        
+        // 페이지 이동 입력 필드 Enter 키 이벤트
+        document.getElementById('goToPageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                goToSpecificPage();
+            }
+        });
+        
+        // 빠른 페이지 이동 입력 필드 Enter 키 이벤트
+        document.getElementById('quickPageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                quickGoToPage();
+            }
+        });
+        
+        // 빌딩 편집 폼 제출
+        document.getElementById('buildingEditForm').addEventListener('submit', saveBuildingEdit);
+        
+        // 키보드 단축키 (Ctrl+G)
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'g') {
+                e.preventDefault();
+                if (pdfDoc) {
+                    openQuickPageModal();
+                }
+            }
+            // 추가 단축키: 좌우 화살표로 페이지 이동
+            if (pdfDoc && !e.target.matches('input, textarea')) {
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    goToPreviousPage();
+                } else if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    goToNextPage();
+                }
+            }
+        });
+        
+        // PDF 업로드
+        const pdfUploadArea = document.getElementById('pdfUploadArea');
+        const pdfInput = document.getElementById('pdfInput');
+        
+        pdfUploadArea.addEventListener('click', () => {
+            if (selectedCompany) {
+                pdfInput.click();
+            } else {
+                showStatus('먼저 회사를 선택하세요.', 'error');
+            }
+        });
+        
+        pdfInput.addEventListener('change', handlePdfUpload);
+        
+        // 드래그 앤 드롭
+        pdfUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            if (selectedCompany) {
+                pdfUploadArea.classList.add('dragover');
+            }
+        });
+        
+        pdfUploadArea.addEventListener('dragleave', () => {
+            pdfUploadArea.classList.remove('dragover');
+        });
+        
+        pdfUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            pdfUploadArea.classList.remove('dragover');
+            
+            if (selectedCompany) {
+                const files = e.dataTransfer.files;
+                if (files.length > 0 && files[0].type === 'application/pdf') {
+                    handlePdfFile(files[0]);
+                }
+            }
+        });
+    }
+    
+    // 빌딩 검색 (복사용) - 개선된 버전 (고유 ID 사용)
+    function searchBuildingsForCopy() {
+        const searchText = document.getElementById('modalBuildingSearchInput').value.toLowerCase();
+        const resultsContainer = document.getElementById('buildingSearchResults');
+        
+        if (!excelData || !searchText) {
+            resultsContainer.innerHTML = '<p class="text-muted text-center small p-3">검색어를 입력하세요.</p>';
+            return;
+        }
+        
+        const matchingBuildings = [];
+        const buildingMap = new Map();
+        
+        // 모든 데이터를 순회하면서 빌딩+공실 정보 수집 (하나의 객체에 모든 정보가 있는 경우 처리)
+        const allItems = [];
+        if (excelData.buildings) allItems.push(...excelData.buildings);
+        if (excelData.vacancies) allItems.push(...excelData.vacancies);
+        
+        // 배열 자체가 데이터인 경우도 처리
+        if (Array.isArray(excelData) && !excelData.buildings && !excelData.vacancies) {
+            allItems.push(...excelData);
+        }
+        
+        // 빌딩 정보 수집
+        allItems.forEach(item => {
+            const buildingName = getBuildingName(item);
+            const company = getCompanyName(item);
+            const address = getAddress(item);
+            
+            if (buildingName && company && 
+                (buildingName.toLowerCase().includes(searchText) || 
+                 address.toLowerCase().includes(searchText))) {
+                const key = `${buildingName}_${company}`;
+                if (!buildingMap.has(key)) {
+                    buildingMap.set(key, {
+                        buildingName,
+                        company,
+                        address,
+                        nearbyStation: getNearbyStation(item),
+                        status: item.status || 'undefined',
+                        vacancies: []
+                    });
+                }
+                
+                // 동일 객체에 공실 정보가 있는지 확인
+                const floor = getFloor(item);
+                const area = getArea(item);
+                const rentalArea = getRentalArea(item);
+                
+                if (floor || area || rentalArea) {
+                    const building = buildingMap.get(key);
+                    const vacancyExists = building.vacancies.some(v => 
+                        v.floor === floor && v.area === area && v.rentalArea === rentalArea
+                    );
+                    
+                    if (!vacancyExists) {
+                        building.vacancies.push({
+                            floor: floor,
+                            area: area,
+                            rentalArea: rentalArea,
+                            status: item.status || 'undefined'
+                        });
+                    }
+                }
+            }
+        });
+        
+        // 공실 중복 제거
+        buildingMap.forEach(building => {
+            if (building.vacancies.length > 1) {
+                building.vacancies = removeDuplicateVacancies(building.vacancies);
+            }
+        });
+        
+        // 결과 표시
+        resultsContainer.innerHTML = '';
+        
+        if (buildingMap.size === 0) {
+            resultsContainer.innerHTML = '<p class="text-muted text-center small p-3">검색 결과가 없습니다.</p>';
+            return;
+        }
+        
+        buildingMap.forEach((building, key) => {
+            const resultItem = document.createElement('div');
+            resultItem.className = 'search-result-item';
+            resultItem.onclick = () => selectBuildingForCopy(building);
+            
+            resultItem.innerHTML = `
+                <div class="search-result-building">${building.buildingName}</div>
+                <div class="search-result-company">${building.company}</div>
+                ${building.address ? `<div class="search-result-address">${building.address}</div>` : ''}
+                <div class="search-result-vacancies">
+                    공실: ${building.vacancies.length}개
+                    ${building.vacancies.slice(0, 3).map(v => `${v.floor}(${v.area}/${v.rentalArea})`).join(', ')}
+                    ${building.vacancies.length > 3 ? '...' : ''}
+                </div>
+            `;
+            
+            resultsContainer.appendChild(resultItem);
+        });
+    }
+    
+    // 빌딩 선택 (복사용)
+    function selectBuildingForCopy(building) {
+        selectedCopyBuilding = building;
+        
+        // 선택 표시
+        document.querySelectorAll('.search-result-item').forEach(item => {
+            item.classList.remove('selected');
+        });
+        event.currentTarget.classList.add('selected');
+        
+        // 빌딩 정보 폼에 입력
+        document.getElementById('editBuildingName').value = building.buildingName;
+        document.getElementById('editBuildingAddress').value = building.address;
+        document.getElementById('editNearbyStation').value = building.nearbyStation;
+        document.getElementById('editBuildingStatus').value = building.status;
+        
+        // 공실 선택 리스트 표시
+        if (building.vacancies.length > 0) {
+            showVacancyCheckboxList(building.vacancies);
+        }
+    }
+    
+    // 공실 체크박스 리스트 표시
+    function showVacancyCheckboxList(vacancies) {
+        const listContainer = document.getElementById('vacancyCheckboxList');
+        const itemsContainer = document.getElementById('vacancyCheckboxItems');
+        
+        if (!vacancies || vacancies.length === 0) {
+            listContainer.style.display = 'none';
+            return;
+        }
+        
+        itemsContainer.innerHTML = '';
+        selectedCopyVacancies = [];
+        
+        vacancies.forEach((vacancy, index) => {
+            const item = document.createElement('div');
+            item.className = 'vacancy-checkbox-item';
+            
+            const vacancyId = `copyVacancy_${Date.now()}_${index}`;
+            
+            item.innerHTML = `
+                <input type="checkbox" class="form-check-input" id="${vacancyId}" 
+                       data-vacancy-index="${index}">
+                <label for="${vacancyId}" class="flex-fill" style="cursor: pointer;">
+                    ${vacancy.floor || '-'} / ${vacancy.area || '-'} / ${vacancy.rentalArea || '-'} / ${getStatusLabel(vacancy.status)}
+                </label>
+            `;
+            
+            itemsContainer.appendChild(item);
+            
+            // 이벤트 리스너 추가
+            const checkbox = document.getElementById(vacancyId);
+            checkbox.addEventListener('change', function() {
+                if (this.checked) {
+                    selectedCopyVacancies.push(selectedCopyBuilding.vacancies[index]);
+                } else {
+                    const vacIndex = selectedCopyVacancies.findIndex(v => 
+                        v.floor === selectedCopyBuilding.vacancies[index].floor && 
+                        v.area === selectedCopyBuilding.vacancies[index].area &&
+                        v.rentalArea === selectedCopyBuilding.vacancies[index].rentalArea
+                    );
+                    if (vacIndex > -1) {
+                        selectedCopyVacancies.splice(vacIndex, 1);
+                    }
+                }
+                updateVacancyEditListFromSelection();
+            });
+        });
+        
+        listContainer.style.display = 'block';
+    }
+    
+    // 전체 공실 선택/해제
+    function toggleAllVacancies() {
+        const checkboxes = document.querySelectorAll('#vacancyCheckboxItems input[type="checkbox"]');
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        
+        selectedCopyVacancies = [];
+        
+        checkboxes.forEach((checkbox) => {
+            checkbox.checked = !allChecked;
+            const index = parseInt(checkbox.dataset.vacancyIndex);
+            if (checkbox.checked && selectedCopyBuilding && selectedCopyBuilding.vacancies[index]) {
+                selectedCopyVacancies.push(selectedCopyBuilding.vacancies[index]);
+            }
+        });
+        
+        updateVacancyEditListFromSelection();
+    }
+    
+    // 선택된 공실을 편집 리스트에 추가
+    function updateVacancyEditListFromSelection() {
+        const container = document.getElementById('vacancyEditList');
+        container.innerHTML = '';
+        
+        selectedCopyVacancies.forEach((vacancy, index) => {
+            addVacancyEditItem(vacancy, index);
+        });
+        
+        if (selectedCopyVacancies.length === 0) {
+            container.innerHTML = '<p class="text-muted small">공실 정보를 추가하세요.</p>';
+        }
+    }
+    
+    // 다른 회사의 공실 복사 (기존 빌딩 편집 시)
+    function copyExistingVacancies() {
+        if (!editingBuildingKey || isNewBuildingMode) return;
+        
+        const [currentBuildingName, currentCompany] = editingBuildingKey.split('_');
+        
+        // 동일한 빌딩명/주소를 가진 다른 회사의 빌딩 찾기
+        const currentBuilding = findBuildingData(currentBuildingName, currentCompany);
+        if (!currentBuilding) return;
+        
+        const searchModal = createVacancyCopyModal(currentBuilding);
+        document.body.appendChild(searchModal);
+    }
+    
+    // 공실 복사 모달 생성
+    function createVacancyCopyModal(currentBuilding) {
+        const modal = document.createElement('div');
+        modal.className = 'building-edit-modal show';
+        modal.style.zIndex = '4000';
+        
+        modal.innerHTML = `
+            <div class="building-edit-content">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">다른 회사의 공실 정보 복사</h5>
+                    <button type="button" class="btn-close" onclick="this.closest('.building-edit-modal').remove()"></button>
+                </div>
+                
+                <div class="building-search-input mb-3">
+                    <input type="text" class="form-control" placeholder="빌딩명 또는 주소로 검색..." 
+                           oninput="searchVacanciesForCopy(this.value, '${getBuildingName(currentBuilding)}', '${getCompanyName(currentBuilding)}')">
+                </div>
+                
+                <div class="building-search-results" id="vacancyCopyResults">
+                    <p class="text-muted text-center small p-3">검색어를 입력하세요.</p>
+                </div>
+                
+                <div class="vacancy-checkbox-list" id="copyVacancyList" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong>공실 선택</strong>
+                        <button class="btn btn-sm btn-outline-primary" onclick="toggleAllCopyVacancies()">
+                            전체 선택/해제
+                        </button>
+                    </div>
+                    <div id="copyVacancyItems"></div>
+                </div>
+                
+                <div class="d-flex gap-2 mt-3">
+                    <button class="btn btn-primary flex-fill" onclick="applyCopiedVacancies()">
+                        <i class="bi bi-check"></i> 적용
+                    </button>
+                    <button class="btn btn-secondary flex-fill" onclick="this.closest('.building-edit-modal').remove()">
+                        취소
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        return modal;
+    }
+    
+    // 공실 검색 (복사용)
+    function searchVacanciesForCopy(searchText, currentBuildingName, currentCompany) {
+        searchText = searchText.toLowerCase();
+        const resultsContainer = document.getElementById('vacancyCopyResults');
+        
+        if (!excelData || !searchText) {
+            resultsContainer.innerHTML = '<p class="text-muted text-center small p-3">검색어를 입력하세요.</p>';
+            return;
+        }
+        
+        const matchingBuildings = new Map();
+        
+        // 모든 데이터에서 다른 회사의 빌딩 검색
+        const allItems = [];
+        if (excelData.buildings) allItems.push(...excelData.buildings);
+        if (excelData.vacancies) allItems.push(...excelData.vacancies);
+        if (Array.isArray(excelData) && !excelData.buildings && !excelData.vacancies) {
+            allItems.push(...excelData);
+        }
+        
+        allItems.forEach(item => {
+            const buildingName = getBuildingName(item);
+            const company = getCompanyName(item);
+            const address = getAddress(item);
+            
+            // 다른 회사의 빌딩만
+            if (company !== currentCompany && 
+                (buildingName.toLowerCase().includes(searchText) || 
+                 address.toLowerCase().includes(searchText))) {
+                const key = `${buildingName}_${company}`;
+                if (!matchingBuildings.has(key)) {
+                    matchingBuildings.set(key, {
+                        buildingName,
+                        company,
+                        address,
+                        vacancies: []
+                    });
+                }
+                
+                // 공실 정보 추가
+                const floor = getFloor(item);
+                const area = getArea(item);
+                const rentalArea = getRentalArea(item);
+                
+                if (floor || area || rentalArea) {
+                    const building = matchingBuildings.get(key);
+                    const vacancyExists = building.vacancies.some(v => 
+                        v.floor === floor && v.area === area && v.rentalArea === rentalArea
+                    );
+                    
+                    if (!vacancyExists) {
+                        building.vacancies.push({
+                            floor: floor,
+                            area: area,
+                            rentalArea: rentalArea,
+                            status: item.status || 'undefined'
+                        });
+                    }
+                }
+            }
+        });
+        
+        // 결과 표시
+        resultsContainer.innerHTML = '';
+        
+        if (matchingBuildings.size === 0) {
+            resultsContainer.innerHTML = '<p class="text-muted text-center small p-3">검색 결과가 없습니다.</p>';
+            return;
+        }
+        
+        matchingBuildings.forEach((building, key) => {
+            if (building.vacancies.length === 0) return;
+            
+            const resultItem = document.createElement('div');
+            resultItem.className = 'search-result-item';
+            resultItem.onclick = () => selectVacanciesForCopy(building);
+            
+            resultItem.innerHTML = `
+                <div class="search-result-building">${building.buildingName}</div>
+                <div class="search-result-company">${building.company}</div>
+                ${building.address ? `<div class="search-result-address">${building.address}</div>` : ''}
+                <div class="search-result-vacancies">
+                    공실: ${building.vacancies.length}개
+                    ${building.vacancies.slice(0, 3).map(v => `${v.floor}(${v.area}/${v.rentalArea})`).join(', ')}
+                    ${building.vacancies.length > 3 ? '...' : ''}
+                </div>
+            `;
+            
+            resultsContainer.appendChild(resultItem);
+        });
+    }
+    
+    // 공실 선택 (복사용)
+    function selectVacanciesForCopy(building) {
+        const listContainer = document.getElementById('copyVacancyList');
+        const itemsContainer = document.getElementById('copyVacancyItems');
+        
+        itemsContainer.innerHTML = '';
+        window.tempCopyVacancies = [];
+        window.tempCopyBuilding = building;
+        
+        building.vacancies.forEach((vacancy, index) => {
+            const item = document.createElement('div');
+            item.className = 'vacancy-checkbox-item';
+            
+            item.innerHTML = `
+                <input type="checkbox" class="form-check-input" id="tempCopyVacancy${index}" 
+                       onchange="toggleTempCopyVacancy(${index})">
+                <label for="tempCopyVacancy${index}" class="flex-fill">
+                    ${vacancy.floor} / ${vacancy.area} / ${vacancy.rentalArea} / ${getStatusLabel(vacancy.status)}
+                </label>
+            `;
+            
+            itemsContainer.appendChild(item);
+        });
+        
+        listContainer.style.display = 'block';
+    }
+    
+    // 임시 공실 선택 토글
+    function toggleTempCopyVacancy(index) {
+        const checkbox = document.getElementById(`tempCopyVacancy${index}`);
+        if (checkbox.checked) {
+            window.tempCopyVacancies.push(window.tempCopyBuilding.vacancies[index]);
+        } else {
+            const vacIndex = window.tempCopyVacancies.indexOf(window.tempCopyBuilding.vacancies[index]);
+            if (vacIndex > -1) {
+                window.tempCopyVacancies.splice(vacIndex, 1);
+            }
+        }
+    }
+    
+    // 전체 복사 공실 선택/해제
+    function toggleAllCopyVacancies() {
+        const checkboxes = document.querySelectorAll('#copyVacancyItems input[type="checkbox"]');
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        
+        window.tempCopyVacancies = [];
+        checkboxes.forEach((checkbox, index) => {
+            checkbox.checked = !allChecked;
+            if (checkbox.checked) {
+                window.tempCopyVacancies.push(window.tempCopyBuilding.vacancies[index]);
+            }
+        });
+    }
+    
+    // 복사된 공실 적용
+    function applyCopiedVacancies() {
+        if (window.tempCopyVacancies && window.tempCopyVacancies.length > 0) {
+            const container = document.getElementById('vacancyEditList');
+            
+            // 기존 공실이 있으면 유지, 없으면 초기화
+            if (container.querySelector('.vacancy-edit-item') === null) {
+                container.innerHTML = '';
+            }
+            
+            window.tempCopyVacancies.forEach(vacancy => {
+                addVacancyEditItem(vacancy);
+            });
+            
+            showStatus(`${window.tempCopyVacancies.length}개의 공실이 복사되었습니다.`, 'success');
+        }
+        
+        // 모달 닫기
+        document.querySelector('.building-edit-modal[style*="z-index: 4000"]').remove();
+    }
+    
+    // 신규 빌딩 추가 모달 열기
+    function openNewBuildingModal() {
+        isNewBuildingMode = true;
+        editingBuildingKey = null;
+        selectedCopyBuilding = null;
+        selectedCopyVacancies = [];
+        
+        // 모드 표시 업데이트
+        const indicator = document.getElementById('editModeIndicator');
+        indicator.className = 'edit-mode-indicator new';
+        indicator.innerHTML = '<i class="bi bi-plus-circle me-2"></i>신규 빌딩 추가';
+        
+        // 빌딩 복사 섹션 표시
+        document.getElementById('buildingCopySection').style.display = 'block';
+        document.getElementById('modalBuildingSearchInput').value = '';
+        document.getElementById('buildingSearchResults').innerHTML = '<p class="text-muted text-center small p-3">검색어를 입력하세요.</p>';
+        document.getElementById('vacancyCheckboxList').style.display = 'none';
+        
+        // 폼 초기화
+        document.getElementById('buildingEditForm').reset();
+        document.getElementById('editBuildingStatus').value = 'active'; // 신규는 기본 노출
+        
+        // 회사 선택 옵션 업데이트
+        updateCompanyOptionsInEditModal();
+        
+        // 공실 정보 초기화
+        document.getElementById('vacancyEditList').innerHTML = '<p class="text-muted small">공실 정보를 추가하세요.</p>';
+        
+        // 모달 표시
+        document.getElementById('buildingEditModal').classList.add('show');
+    }
+    
+    // 빌딩 편집 모달 열기
+    function openBuildingEditModal(buildingName, company) {
+        isNewBuildingMode = false;
+        editingBuildingKey = `${buildingName}_${company}`;
+        selectedCopyBuilding = null;
+        selectedCopyVacancies = [];
+        
+        // 모드 표시 업데이트
+        const indicator = document.getElementById('editModeIndicator');
+        indicator.className = 'edit-mode-indicator edit';
+        indicator.innerHTML = '<i class="bi bi-pencil me-2"></i>빌딩 정보 편집';
+        
+        // 빌딩 복사 섹션 숨기기
+        document.getElementById('buildingCopySection').style.display = 'none';
+        
+        // 현재 빌딩 정보 로드
+        const building = findBuildingData(buildingName, company);
+        if (!building) {
+            showStatus('빌딩 정보를 찾을 수 없습니다.', 'error');
+            return;
+        }
+        
+        // 폼 필드 채우기
+        document.getElementById('editBuildingName').value = buildingName;
+        document.getElementById('editBuildingAddress').value = getAddress(building);
+        document.getElementById('editNearbyStation').value = getNearbyStation(building);
+        document.getElementById('editBuildingStatus').value = building.status || 'undefined';
+        
+        // 회사 선택 옵션 업데이트
+        updateCompanyOptionsInEditModal();
+        document.getElementById('editBuildingCompany').value = company;
+        
+        // 공실 정보 로드
+        loadVacanciesForEdit(buildingName, company);
+        
+        // 모달 표시
+        document.getElementById('buildingEditModal').classList.add('show');
+    }
+    
+    // 빌딩 편집 모달 닫기
+    function closeBuildingEditModal(event) {
+        if (event && event.target !== event.currentTarget) return;
+        
+        document.getElementById('buildingEditModal').classList.remove('show');
+        editingBuildingKey = null;
+        isNewBuildingMode = false;
+        selectedCopyBuilding = null;
+        selectedCopyVacancies = [];
+        
+        // 폼 초기화
+        document.getElementById('buildingEditForm').reset();
+        document.getElementById('vacancyEditList').innerHTML = '';
+    }
+    
+    // 빌딩 데이터 찾기 - 개선된 버전
+    function findBuildingData(buildingName, company) {
+        if (!excelData) return null;
+        
+        // 빌딩명 정규화
+        const normalizedSearchName = normalizeBuildingName(buildingName);
+        
+        // buildings 배열에서 찾기
+        if (excelData.buildings && Array.isArray(excelData.buildings)) {
+            const found = excelData.buildings.find(building => {
+                const bName = getBuildingName(building);
+                const bCompany = getCompanyName(building);
+                const normalizedBName = normalizeBuildingName(bName);
+                return normalizedBName === normalizedSearchName && bCompany === company;
+            });
+            if (found) return found;
+        }
+        
+        // vacancies 배열에서 찾기 (빌딩 정보가 공실 데이터에 포함된 경우)
+        if (excelData.vacancies && Array.isArray(excelData.vacancies)) {
+            const found = excelData.vacancies.find(vacancy => {
+                const vName = getBuildingName(vacancy);
+                const vCompany = getCompanyName(vacancy);
+                const normalizedVName = normalizeBuildingName(vName);
+                return normalizedVName === normalizedSearchName && vCompany === company;
+            });
+            if (found) return found;
+        }
+        
+        // 배열 자체가 데이터인 경우
+        if (Array.isArray(excelData) && !excelData.buildings && !excelData.vacancies) {
+            const found = excelData.find(item => {
+                const iName = getBuildingName(item);
+                const iCompany = getCompanyName(item);
+                const normalizedIName = normalizeBuildingName(iName);
+                return normalizedIName === normalizedSearchName && iCompany === company;
+            });
+            if (found) return found;
+        }
+        
+        return null;
+    }
+    
+    // 편집 모달의 회사 옵션 업데이트
+    function updateCompanyOptionsInEditModal() {
+        const select = document.getElementById('editBuildingCompany');
+        select.innerHTML = '<option value="">회사 선택</option>';
+        
+        if (excelData) {
+            const companies = extractCompanies(excelData);
+            Array.from(companies).sort().forEach(company => {
+                const option = document.createElement('option');
+                option.value = company;
+                option.textContent = company;
+                select.appendChild(option);
+            });
+        }
+    }
+    
+    // 편집용 공실 정보 로드 - 개선된 버전
+    function loadVacanciesForEdit(buildingName, company) {
+        const container = document.getElementById('vacancyEditList');
+        container.innerHTML = '';
+        
+        if (!excelData) {
+            container.innerHTML = '<p class="text-muted small">등록된 공실이 없습니다.</p>';
+            return;
+        }
+        
+        const normalizedBuildingName = normalizeBuildingName(buildingName);
+        const vacancies = [];
+        
+        // 모든 데이터 소스에서 공실 정보 수집
+        const allItems = [];
+        if (excelData.buildings) allItems.push(...excelData.buildings);
+        if (excelData.vacancies) allItems.push(...excelData.vacancies);
+        if (Array.isArray(excelData) && !excelData.buildings && !excelData.vacancies) {
+            allItems.push(...excelData);
+        }
+        
+        allItems.forEach(item => {
+            const iName = getBuildingName(item);
+            const iCompany = getCompanyName(item);
+            const normalizedIName = normalizeBuildingName(iName);
+            
+            if (normalizedIName === normalizedBuildingName && iCompany === company) {
+                const floor = getFloor(item);
+                const area = getArea(item);
+                const rentalArea = getRentalArea(item);
+                
+                // 공실 정보가 있는 경우에만 추가
+                if (floor || area || rentalArea) {
+                    vacancies.push({
+                        층: floor,
+                        전용면적: area,
+                        임대면적: rentalArea,
+                        status: item.status || 'undefined',
+                        isNoVacancy: item.isNoVacancy || false
+                    });
+                }
+            }
+        });
+        
+        // 중복 공실 제거
+        const uniqueVacancies = removeDuplicateVacancies(vacancies);
+        
+        // 중복 제거 알림
+        if (vacancies.length > uniqueVacancies.length) {
+            const warningDiv = document.createElement('div');
+            warningDiv.className = 'duplicate-vacancy-warning';
+            warningDiv.innerHTML = `<i class="bi bi-exclamation-triangle"></i> ${vacancies.length - uniqueVacancies.length}개의 중복 공실이 제거되었습니다.`;
+            container.appendChild(warningDiv);
+        }
+        
+        uniqueVacancies.forEach((vacancy, index) => {
+            addVacancyEditItem(vacancy, index);
+        });
+        
+        if (uniqueVacancies.length === 0) {
+            container.innerHTML = '<p class="text-muted small">등록된 공실이 없습니다.</p>';
+        }
+    }
+    
+    // 공실 편집 아이템 추가 - 임대면적 포함한 개선된 UI
+    function addVacancyEditItem(vacancy = null, index = null) {
+        const container = document.getElementById('vacancyEditList');
+        const vacancyId = index !== null ? index : Date.now();
+        
+        // "등록된 공실이 없습니다" 메시지 제거
+        const emptyMessage = container.querySelector('p.text-muted');
+        if (emptyMessage) {
+            emptyMessage.remove();
+        }
+        
+        // 중복 경고도 제거
+        const warning = container.querySelector('.duplicate-vacancy-warning');
+        if (warning) {
+            warning.remove();
+        }
+        
+        const item = document.createElement('div');
+        item.className = 'vacancy-edit-item';
+        item.dataset.vacancyIndex = vacancyId;
+        
+        const floor = vacancy ? getFloor(vacancy) : '';
+        const area = vacancy ? getArea(vacancy) : '';
+        const rentalArea = vacancy ? getRentalArea(vacancy) : '';
+        const status = vacancy ? (vacancy.status || 'undefined') : 'active'; // 신규는 기본 노출
+        
+        item.innerHTML = `
+            <div class="vacancy-edit-controls">
+                <input type="text" class="form-control form-control-sm" 
+                       name="floor" value="${floor}" placeholder="층" title="층">
+                <input type="text" class="form-control form-control-sm" 
+                       name="area" value="${area}" placeholder="전용면적" title="전용면적">
+                <input type="text" class="form-control form-control-sm" 
+                       name="rentalArea" value="${rentalArea}" placeholder="임대면적" title="임대면적">
+                <select class="form-select form-select-sm" name="status" title="노출여부">
+                    <option value="undefined" ${status === 'undefined' ? 'selected' : ''}>미설정</option>
+                    <option value="active" ${status === 'active' ? 'selected' : ''}>노출</option>
+                    <option value="inactive" ${status === 'inactive' ? 'selected' : ''}>비노출</option>
+                </select>
+                <button type="button" class="btn btn-sm btn-outline-info" onclick="duplicateVacancyItem(${vacancyId})" 
+                        title="복사">
+                    <i class="bi bi-files"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeVacancyEditItem(${vacancyId})" 
+                        title="삭제">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        `;
+        
+        container.appendChild(item);
+    }
+    
+    // 공실 아이템 복제
+    function duplicateVacancyItem(vacancyId) {
+        const sourceItem = document.querySelector(`[data-vacancy-index="${vacancyId}"]`);
+        if (!sourceItem) return;
+        
+        const floor = sourceItem.querySelector('input[name="floor"]').value.trim();
+        const area = sourceItem.querySelector('input[name="area"]').value.trim();
+        const rentalArea = sourceItem.querySelector('input[name="rentalArea"]').value.trim();
+        const status = sourceItem.querySelector('select[name="status"]').value;
+        
+        if (!floor && !area && !rentalArea) {
+            showStatus('최소한 하나의 필드는 입력되어야 복사할 수 있습니다.', 'error');
+            return;
+        }
+        
+        addVacancyEditItem({
+            층: floor,
+            전용면적: area,
+            임대면적: rentalArea,
+            status: status
+        });
+        
+        showStatus('공실 정보가 복사되었습니다.', 'success');
+    }
+    
+    // 새 공실 추가
+    function addNewVacancy() {
+        addVacancyEditItem();
+    }
+    
+    // 공실 편집 아이템 제거
+    function removeVacancyEditItem(vacancyId) {
+        const item = document.querySelector(`[data-vacancy-index="${vacancyId}"]`);
+        if (item) {
+            item.remove();
+            
+            const container = document.getElementById('vacancyEditList');
+            if (container.children.length === 0) {
+                container.innerHTML = '<p class="text-muted small">등록된 공실이 없습니다.</p>';
+            }
+        }
+    }
+    
+    // 빌딩 편집 저장 - 개선된 버전 (UI 갱신 추가)
+    function saveBuildingEdit(event) {
+        event.preventDefault();
+        
+        const newBuildingName = document.getElementById('editBuildingName').value.trim();
+        const newAddress = document.getElementById('editBuildingAddress').value.trim();
+        const nearbyStation = document.getElementById('editNearbyStation').value.trim();
+        const newCompany = document.getElementById('editBuildingCompany').value;
+        const buildingStatus = document.getElementById('editBuildingStatus').value;
+        
+        if (!newBuildingName || !newCompany) {
+            showStatus('빌딩명과 회사는 필수 입력 항목입니다.', 'error');
+            return;
+        }
+        
+        // 데이터 초기화 (필요시)
+        if (!excelData) {
+            excelData = {
+                buildings: [],
+                vacancies: []
+            };
+        }
+        if (!excelData.buildings) excelData.buildings = [];
+        if (!excelData.vacancies) excelData.vacancies = [];
+        
+        if (isNewBuildingMode) {
+            // 신규 빌딩 추가
+            const newBuilding = {
+                빌딩명: newBuildingName,
+                출처회사: newCompany,
+                주소: newAddress,
+                인근역: nearbyStation,
+                status: buildingStatus,
+                buildingName: newBuildingName,
+                company: newCompany,
+                address: newAddress,
+                nearbyStation: nearbyStation
+            };
+            
+            excelData.buildings.push(newBuilding);
+            
+            // 공실 정보 추가
+            addVacanciesFromEdit(newBuildingName, newCompany);
+            
+            showStatus(`신규 빌딩 "${newBuildingName}"이(가) 성공적으로 추가되었습니다.`, 'success');
+        } else {
+            // 기존 빌딩 편집
+            if (!editingBuildingKey || !excelData) {
+                showStatus('편집할 빌딩 정보가 없습니다.', 'error');
+                return;
+            }
+            
+            const [oldBuildingName, oldCompany] = editingBuildingKey.split('_');
+            
+            // 빌딩 정보 업데이트 - 개선된 버전
+            let buildingFound = false;
+            const normalizedOldName = normalizeBuildingName(oldBuildingName);
+            
+            // 모든 데이터 소스에서 빌딩 업데이트
+            const allSources = [
+                excelData.buildings || [],
+                excelData.vacancies || [],
+                Array.isArray(excelData) && !excelData.buildings && !excelData.vacancies ? excelData : []
+            ].filter(arr => arr.length > 0);
+            
+            allSources.forEach(source => {
+                source.forEach(item => {
+                    const bName = getBuildingName(item);
+                    const bCompany = getCompanyName(item);
+                    const normalizedBName = normalizeBuildingName(bName);
+                    
+                    if (normalizedBName === normalizedOldName && bCompany === oldCompany) {
+                        buildingFound = true;
+                        
+                        // 모든 필드 업데이트 - 다양한 필드명 고려
+                        updateBuildingField(item, 'buildingName', newBuildingName);
+                        updateBuildingField(item, 'company', newCompany);
+                        updateBuildingField(item, 'address', newAddress);
+                        updateBuildingField(item, 'nearbyStation', nearbyStation);
+                        item.status = buildingStatus;
+                    }
+                });
+            });
+            
+            if (!buildingFound) {
+                showStatus('빌딩 정보를 찾을 수 없습니다.', 'error');
+                return;
+            }
+            
+            // 공실 정보 업데이트
+            updateVacanciesFromEdit(oldBuildingName, oldCompany, newBuildingName, newCompany);
+            
+            // 매핑 데이터 업데이트 (빌딩명이나 회사가 변경된 경우)
+            if (oldBuildingName !== newBuildingName || oldCompany !== newCompany) {
+                updateMappingDataAfterEdit(oldBuildingName, oldCompany, newBuildingName, newCompany);
+            }
+            
+            // 공실 처리 상태 업데이트
+            const oldKey = `${oldBuildingName}_${oldCompany}`;
+            const newKey = `${newBuildingName}_${newCompany}`;
+            if (vacantBuildings.has(oldKey) && oldKey !== newKey) {
+                vacantBuildings.delete(oldKey);
+                vacantBuildings.add(newKey);
+            }
+            
+            showStatus('빌딩 정보가 성공적으로 업데이트되었습니다.', 'success');
+        }
+        
+        // UI 업데이트 - 개선된 버전
+        displayBuildingGroups();
+        updateMappingDisplay();
+        updateCompanySelect(Array.from(extractCompanies(excelData)).sort());
+        updateCompanyFilterOptions();
+        updateCompanyMappingCounts(); // 추가됨
+        updateDebugInfo(); // 추가됨
+        
+        if (autoSave) {
+            saveMapping();
+        }
+        
+        closeBuildingEditModal();
+    }
+    
+    // 빌딩 필드 업데이트 헬퍼 함수
+    function updateBuildingField(building, type, value) {
+        switch(type) {
+            case 'buildingName':
+                if (building.빌딩명 !== undefined) building.빌딩명 = value;
+                if (building.buildingName !== undefined) building.buildingName = value;
+                if (building.name !== undefined) building.name = value;
+                if (building['빌딩 명'] !== undefined) building['빌딩 명'] = value;
+                if (building.building_name !== undefined) building.building_name = value;
+                break;
+            case 'company':
+                if (building.출처회사 !== undefined) building.출처회사 = value;
+                if (building.company !== undefined) building.company = value;
+                if (building.회사명 !== undefined) building.회사명 = value;
+                if (building.회사 !== undefined) building.회사 = value;
+                if (building.source !== undefined) building.source = value;
+                if (building.sourceName !== undefined) building.sourceName = value;
+                break;
+            case 'address':
+                if (value !== '') {
+                    building.주소 = value;
+                    building.address = value;
+                    building.addr = value;
+                    building['주 소'] = value;
+                    building.location = value;
+                }
+                break;
+            case 'nearbyStation':
+                if (value !== '') {
+                    building.인근역 = value;
+                    building.nearbyStation = value;
+                    building.station = value;
+                    building.subway = value;
+                    building.nearStation = value;
+                    building['인근 역'] = value;
+                }
+                break;
+        }
+    }
+    
+    // 편집에서 공실 정보 추가 (신규 빌딩용) - 임대면적 포함
+    function addVacanciesFromEdit(buildingName, company) {
+        const vacancyItems = document.querySelectorAll('.vacancy-edit-item');
+        const newAddress = document.getElementById('editBuildingAddress').value.trim();
+        const newNearbyStation = document.getElementById('editNearbyStation').value.trim();
+        
+        vacancyItems.forEach(item => {
+            const floor = item.querySelector('input[name="floor"]').value.trim();
+            const area = item.querySelector('input[name="area"]').value.trim();
+            const rentalArea = item.querySelector('input[name="rentalArea"]').value.trim();
+            const status = item.querySelector('select[name="status"]').value;
+            
+            if (floor || area || rentalArea) {
+                // 다양한 필드명으로 저장
+                excelData.vacancies.push({
+                    빌딩명: buildingName,
+                    출처회사: company,
+                    층: floor,
+                    전용면적: area,
+                    임대면적: rentalArea,
+                    주소: newAddress,
+                    인근역: newNearbyStation,
+                    status: status,
+                    // 추가 필드명
+                    buildingName: buildingName,
+                    company: company,
+                    floor: floor,
+                    area: area,
+                    rentalArea: rentalArea,
+                    address: newAddress,
+                    nearbyStation: newNearbyStation
+                });
+            }
+        });
+    }
+    
+    // 편집에서 공실 정보 업데이트 (기존 빌딩용) - 임대면적 포함
+    function updateVacanciesFromEdit(oldBuildingName, oldCompany, newBuildingName, newCompany) {
+        const normalizedOldName = normalizeBuildingName(oldBuildingName);
+        
+        // 기존 공실 정보 제거
+        if (excelData.vacancies) {
+            excelData.vacancies = excelData.vacancies.filter(vacancy => {
+                const vName = getBuildingName(vacancy);
+                const vCompany = getCompanyName(vacancy);
+                const normalizedVName = normalizeBuildingName(vName);
+                return !(normalizedVName === normalizedOldName && vCompany === oldCompany);
+            });
+        }
+        
+        // 새 공실 정보 추가
+        addVacanciesFromEdit(newBuildingName, newCompany);
+    }
+    
+    // 편집 후 매핑 데이터 업데이트
+    function updateMappingDataAfterEdit(oldBuildingName, oldCompany, newBuildingName, newCompany) {
+        const normalizedOldName = normalizeBuildingName(oldBuildingName);
+        const normalizedNewName = normalizeBuildingName(newBuildingName);
+        
+        Object.keys(mappingData).forEach(fileName => {
+            const fileData = mappingData[fileName];
+            if (fileData.company === oldCompany) {
+                // 정규화된 이름으로 찾기
+                let foundKey = null;
+                for (const buildingKey in fileData.buildings) {
+                    if (normalizeBuildingName(buildingKey) === normalizedOldName) {
+                        foundKey = buildingKey;
+                        break;
+                    }
+                }
+                
+                if (foundKey) {
+                    const pageNum = fileData.buildings[foundKey];
+                    delete fileData.buildings[foundKey];
+                    
+                    // 회사가 변경된 경우 새로운 파일 데이터 생성할지 확인
+                    if (oldCompany !== newCompany) {
+                        fileData.company = newCompany;
+                    }
+                    
+                    fileData.buildings[newBuildingName] = pageNum;
+                }
+            }
+        });
+    }
+    
+    // 페이지 매핑 입력으로 매핑 추가
+    function addMappingFromInput(buildingName, company, inputElement) {
+        const pageNum = parseInt(inputElement.value);
+        
+        if (!pageNum || pageNum < 1) {
+            showStatus('유효한 페이지 번호를 입력하세요.', 'error');
+            return;
+        }
+        
+        const fileName = document.getElementById('pdfFileName').textContent;
+        if (!fileName) {
+            showStatus('먼저 PDF 파일을 업로드하세요.', 'error');
+            return;
+        }
+        
+        if (!mappingData[fileName]) {
+            mappingData[fileName] = {
+                fileName: fileName,
+                company: selectedCompany,
+                buildings: {}
+            };
+        }
+        
+        mappingData[fileName].buildings[buildingName] = pageNum;
+        
+        updateMappingDisplay();
+        updateCompanyMappingCounts();
+        displayBuildingGroups();
+        
+        // 입력 필드 클리어
+        inputElement.value = '';
+        
+        if (autoSave) {
+            saveMapping();
+        }
+        
+        showStatus(`${buildingName}이(가) ${pageNum}페이지에 매핑되었습니다.`, 'success');
+    }
+    
+    // 백업 관리 함수들
+    function createBackup() {
+        const backup = {
+            timestamp: new Date().toISOString(),
+            excelData: JSON.parse(JSON.stringify(excelData)),
+            mappingData: JSON.parse(JSON.stringify(mappingData)),
+            vacantBuildings: Array.from(vacantBuildings)
+        };
+        
+        backupData.push(backup);
+        if (backupData.length > 5) {
+            backupData.shift(); // 최대 5개까지만 유지
+        }
+        
+        localStorage.setItem('mappingBackups', JSON.stringify(backupData));
+        updateBackupCount();
+        showStatus('백업이 생성되었습니다.', 'success');
+    }
+    
+    function restoreBackup() {
+        if (backupData.length === 0) {
+            showStatus('복원할 백업이 없습니다.', 'error');
+            return;
+        }
+        
+        const lastBackup = backupData[backupData.length - 1];
+        if (confirm(`${new Date(lastBackup.timestamp).toLocaleString()} 백업을 복원하시겠습니까?`)) {
+            excelData = lastBackup.excelData;
+            mappingData = lastBackup.mappingData;
+            vacantBuildings = new Set(lastBackup.vacantBuildings);
+            
+            checkDataStatus();
+            displayBuildingGroups();
+            updateMappingDisplay();
+            updateDebugInfo();
+            showStatus('백업이 복원되었습니다.', 'success');
+        }
+    }
+    
+    function compareWithBackup() {
+        if (backupData.length === 0) {
+            showStatus('비교할 백업이 없습니다.', 'error');
+            return;
+        }
+        
+        comparisonMode = true;
+        document.getElementById('comparisonMode').checked = true;
+        document.getElementById('comparisonBadge').textContent = 'ON';
+        document.getElementById('comparisonBadge').className = 'badge bg-success';
+        displayBuildingGroups();
+        showStatus('비교 모드가 활성화되었습니다.', 'success');
+    }
+    
+    function loadBackups() {
+        const saved = localStorage.getItem('mappingBackups');
+        if (saved) {
+            backupData = JSON.parse(saved);
+            updateBackupCount();
+        }
+    }
+    
+    function updateBackupCount() {
+        document.getElementById('backupCount').textContent = `${backupData.length}개`;
+    }
+    
+    // 데이터 상태 확인
+    function checkDataStatus() {
+        const excelStatus = document.getElementById('excelDataStatus');
+        const mappingStatus = document.getElementById('mappingDataStatus');
+        
+        if (excelData) {
+            excelStatus.classList.add('loaded');
+            excelStatus.classList.remove('not-loaded');
+        } else {
+            excelStatus.classList.add('not-loaded');
+            excelStatus.classList.remove('loaded');
+        }
+        
+        if (Object.keys(mappingData).length > 0) {
+            mappingStatus.classList.add('loaded');
+            mappingStatus.classList.remove('not-loaded');
+        } else {
+            mappingStatus.classList.add('not-loaded');
+            mappingStatus.classList.remove('loaded');
+        }
+        
+        updateDebugInfo();
+    }
+    
+    // Excel 데이터 업로드 처리
+    async function handleExcelDataUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        try {
+            const text = await file.text();
+            const jsonData = JSON.parse(text);
+            
+            console.log('로드된 JSON 데이터:', jsonData);
+            
+            // JSON 구조 검사 및 정규화
+            excelData = normalizeExcelData(jsonData);
+            
+            console.log('정규화된 데이터:', excelData);
+            
+            // 회사 목록 추출
+            const companies = extractCompanies(excelData);
+            
+            // 회사 선택 옵션 업데이트
+            updateCompanySelect(Array.from(companies).sort());
+            
+            // 회사별 필터 옵션 업데이트
+            updateCompanyFilterOptions();
+            
+            // 상태 업데이트
+            checkDataStatus();
+            showStatus('Excel 데이터를 성공적으로 불러왔습니다.', 'success');
+            
+            // 빌딩 목록 표시
+            displayBuildingGroups();
+            
+        } catch (error) {
+            console.error('Excel 데이터 로드 실패:', error);
+            showStatus('Excel 데이터 로드 실패: ' + error.message, 'error');
+        }
+    }
+    
+    // JSON 데이터 정규화 - 개선된 버전
+    function normalizeExcelData(jsonData) {
+        let normalized = {
+            buildings: [],
+            vacancies: []
+        };
+        
+        console.log('정규화 시작 - 원본 데이터 타입:', typeof jsonData, 'Array 여부:', Array.isArray(jsonData));
+        
+        // Case 1: 직접 buildings, vacancies 배열이 있는 경우
+        if (jsonData.buildings && Array.isArray(jsonData.buildings)) {
+            console.log('Case 1: buildings 배열 발견:', jsonData.buildings.length);
+            normalized.buildings = jsonData.buildings;
+        }
+        
+        if (jsonData.vacancies && Array.isArray(jsonData.vacancies)) {
+            console.log('Case 1: vacancies 배열 발견:', jsonData.vacancies.length);
+            normalized.vacancies = jsonData.vacancies;
+        }
+        
+        // Case 2: 루트 레벨에 배열이 있는 경우
+        if (Array.isArray(jsonData)) {
+            console.log('Case 2: 루트가 배열임, 길이:', jsonData.length);
+            
+            // 하나의 객체에 buildings/vacancies가 있는 경우
+            if (jsonData.length > 0 && jsonData[0]) {
+                if (jsonData[0].buildings && Array.isArray(jsonData[0].buildings)) {
+                    console.log('Case 2a: 첫 항목에 buildings 있음');
+                    normalized.buildings = jsonData[0].buildings;
+                }
+                if (jsonData[0].vacancies && Array.isArray(jsonData[0].vacancies)) {
+                    console.log('Case 2b: 첫 항목에 vacancies 있음');
+                    normalized.vacancies = jsonData[0].vacancies;
+                }
+            }
+            
+            // 배열 자체가 데이터인 경우 (빌딩과 공실이 동일 객체에)
+            if (!normalized.buildings.length && !normalized.vacancies.length && jsonData.length > 0) {
+                console.log('Case 2c: 배열 자체가 데이터, 항목 구조 분석 중...');
+                
+                // 각 항목이 빌딩과 공실 정보를 모두 포함하는지 확인
+                const sampleItems = jsonData.slice(0, Math.min(10, jsonData.length));
+                let hasBuildings = 0;
+                let hasVacancies = 0;
+                
+                sampleItems.forEach(item => {
+                    if (getBuildingName(item) && getCompanyName(item)) {
+                        hasBuildings++;
+                    }
+                    if (getFloor(item) || getArea(item) || getRentalArea(item)) {
+                        hasVacancies++;
+                    }
+                });
+                
+                console.log(`샘플 분석 결과 - 빌딩: ${hasBuildings}/${sampleItems.length}, 공실: ${hasVacancies}/${sampleItems.length}`);
+                
+                if (hasBuildings > 0) {
+                    // 빌딩 정보를 위한 고유 빌딩들 추출
+                    const buildingMap = new Map();
+                    jsonData.forEach(item => {
+                        const buildingName = getBuildingName(item);
+                        const company = getCompanyName(item);
+                        if (buildingName && company) {
+                            const key = `${normalizeBuildingName(buildingName)}_${company}`;
+                            if (!buildingMap.has(key)) {
+                                buildingMap.set(key, item);
+                            }
+                        }
+                    });
+                    normalized.buildings = Array.from(buildingMap.values());
+                    console.log('고유 빌딩 추출 완료:', normalized.buildings.length);
+                }
+                
+                if (hasVacancies > 0) {
+                    // 공실 정보가 있는 항목들 수집
+                    normalized.vacancies = jsonData.filter(item => {
+                        const floor = getFloor(item);
+                        const area = getArea(item);
+                        const rentalArea = getRentalArea(item);
+                        return floor || area || rentalArea;
+                    });
+                    console.log('공실 정보 추출 완료:', normalized.vacancies.length);
+                }
+            }
+        }
+        
+        // Case 3: 다른 키 이름들 확인
+        const possibleBuildingKeys = ['building', 'buildingList', '빌딩목록', 'data', '건물'];
+        const possibleVacancyKeys = ['vacancy', 'vacancyList', '공실목록', '공실', '임대정보'];
+        
+        if (!normalized.buildings.length) {
+            for (const key of possibleBuildingKeys) {
+                if (jsonData[key] && Array.isArray(jsonData[key])) {
+                    console.log(`Case 3: ${key} 키로 빌딩 데이터 발견:`, jsonData[key].length);
+                    normalized.buildings = jsonData[key];
+                    break;
+                }
+            }
+        }
+        
+        if (!normalized.vacancies.length) {
+            for (const key of possibleVacancyKeys) {
+                if (jsonData[key] && Array.isArray(jsonData[key])) {
+                    console.log(`Case 3: ${key} 키로 공실 데이터 발견:`, jsonData[key].length);
+                    normalized.vacancies = jsonData[key];
+                    break;
+                }
+            }
+        }
+        
+        console.log('정규화 완료 - 빌딩:', normalized.buildings.length, '공실:', normalized.vacancies.length);
+        return normalized;
+    }
+    
+    // 매핑 데이터 업로드 처리
+    async function handleMappingDataUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        try {
+            const text = await file.text();
+            const importedData = JSON.parse(text);
+            
+            if (importedData.version === "2.0" && importedData.pdfs) {
+                mappingData = {};
+                importedData.pdfs.forEach(pdfData => {
+                    mappingData[pdfData.fileName] = {
+                        fileName: pdfData.fileName,
+                        company: pdfData.company,
+                        buildings: pdfData.buildings
+                    };
+                });
+                
+                checkDataStatus();
+                updateMappingDisplay();
+                displayBuildingGroups();
+                showStatus('매핑 데이터를 성공적으로 불러왔습니다.', 'success');
+            } else {
+                showStatus('올바른 매핑 파일 형식이 아닙니다.', 'error');
+            }
+            
+        } catch (error) {
+            console.error('매핑 데이터 로드 실패:', error);
+            showStatus('매핑 데이터 로드 실패: ' + error.message, 'error');
+        }
+    }
+    
+    // 회사 목록 추출 - 개선된 버전
+    function extractCompanies(data) {
+        const companies = new Set();
+        
+        // 모든 데이터 소스에서 회사명 추출
+        const allItems = [];
+        if (data.buildings) allItems.push(...data.buildings);
+        if (data.vacancies) allItems.push(...data.vacancies);
+        if (Array.isArray(data) && !data.buildings && !data.vacancies) allItems.push(...data);
+        
+        allItems.forEach(item => {
+            const company = getCompanyName(item);
+            if (company) companies.add(company);
+        });
+        
+        console.log('추출된 회사 목록:', Array.from(companies));
+        return companies;
+    }
+    
+    // 회사 선택 옵션 업데이트
+    function updateCompanySelect(companies) {
+        const select = document.getElementById('companySelect');
+        select.innerHTML = '<option value="">전체 회사</option>';
+        
+        companies.forEach(company => {
+            const option = document.createElement('option');
+            option.value = company;
+            option.textContent = company;
+            select.appendChild(option);
+        });
+    }
+    
+    // 회사별 필터 옵션 업데이트 (셀렉트박스)
+    function updateCompanyFilterOptions() {
+        const select = document.getElementById('companyFilterSelect');
+        select.innerHTML = '<option value="all">전체 회사 (0)</option>';
+        
+        if (excelData) {
+            const companies = extractCompanies(excelData);
+            Array.from(companies).sort().forEach(company => {
+                const option = document.createElement('option');
+                option.value = company;
+                option.textContent = `${company} (0)`;
+                select.appendChild(option);
+            });
+        }
+        
+        updateCompanyMappingCounts();
+    }
+    
+    // 회사별 매핑 개수 업데이트
+    function updateCompanyMappingCounts() {
+        const companyCounts = {};
+        let totalCount = 0;
+        
+        Object.values(mappingData).forEach(fileData => {
+            const count = Object.keys(fileData.buildings || {}).length;
+            companyCounts[fileData.company] = (companyCounts[fileData.company] || 0) + count;
+            totalCount += count;
+        });
+        
+        // 셀렉트박스 옵션 업데이트
+        const select = document.getElementById('companyFilterSelect');
+        Array.from(select.options).forEach(option => {
+            const company = option.value;
+            if (company === 'all') {
+                option.textContent = `전체 회사 (${totalCount})`;
+            } else {
+                const count = companyCounts[company] || 0;
+                option.textContent = `${company} (${count})`;
+            }
+        });
+    }
+    
+    // 회사별 필터링
+    function filterByCompany(company) {
+        currentCompanyFilter = company;
+        updateMappingDisplay();
+    }
+    
+    // 회사 변경 처리
+    function handleCompanyChange(event) {
+        selectedCompany = event.target.value;
+        
+        // PDF 업로드 영역 업데이트
+        const uploadArea = document.getElementById('pdfUploadArea');
+        if (selectedCompany) {
+            uploadArea.style.opacity = '1';
+            const uploadText = uploadArea.querySelector('p.mt-3');
+            if (uploadText) {
+                uploadText.textContent = `${selectedCompany}의 PDF 파일을 업로드하세요`;
+            }
+        } else {
+            uploadArea.style.opacity = '0.5';
+        }
+        
+        // 빌딩 목록 업데이트
+        displayBuildingGroups();
+    }
+    
+    // 공실 처리 토글
+    function toggleVacant(buildingName, company, event) {
+        event.stopPropagation();
+        const button = event.currentTarget;
+        const normalizedName = normalizeBuildingName(buildingName);
+        const key = `${normalizedName}_${company}`;
+        
+        if (vacantBuildings.has(key)) {
+            // 공실 해제
+            vacantBuildings.delete(key);
+            button.classList.remove('active');
+            button.textContent = '공실처리';
+            
+            // "공실없음" 항목 제거
+            removeNoVacancyItem(buildingName, company);
+            
+            showStatus(`${buildingName}의 공실처리가 해제되었습니다.`, 'success');
+        } else {
+            // 공실 처리
+            vacantBuildings.add(key);
+            button.classList.add('active');
+            button.textContent = '공실해제';
+            
+            // 모든 공실 비노출 처리
+            updateVacanciesStatus(buildingName, company, 'inactive');
+            
+            // "공실없음" 항목 추가
+            addNoVacancyItem(buildingName, company);
+            
+            showStatus(`${buildingName}이(가) 공실처리되었습니다. 모든 공실이 비노출 처리되고 "공실없음" 항목이 추가되었습니다.`, 'success');
+        }
+        
+        displayBuildingGroups();
+        
+        if (autoSave) {
+            saveMapping();
+        }
+    }
+    
+    // "공실없음" 항목 추가
+    function addNoVacancyItem(buildingName, company) {
+        if (!excelData.vacancies) {
+            excelData.vacancies = [];
+        }
+        
+        const normalizedName = normalizeBuildingName(buildingName);
+        
+        // 중복 확인
+        const existing = excelData.vacancies.find(v => {
+            const vName = getBuildingName(v);
+            const vCompany = getCompanyName(v);
+            const normalizedVName = normalizeBuildingName(vName);
+            return normalizedVName === normalizedName && 
+                   vCompany === company && 
+                   getFloor(v) === '공실없음';
+        });
+        
+        if (!existing) {
+            excelData.vacancies.push({
+                빌딩명: buildingName,
+                출처회사: company,
+                층: '공실없음',
+                전용면적: '-',
+                임대면적: '-',
+                status: 'active',
+                isNoVacancy: true,
+                // 추가 필드명
+                buildingName: buildingName,
+                company: company,
+                floor: '공실없음',
+                area: '-',
+                rentalArea: '-'
+            });
+        }
+    }
+    
+    // "공실없음" 항목 제거
+    function removeNoVacancyItem(buildingName, company) {
+        if (!excelData.vacancies) return;
+        
+        const normalizedName = normalizeBuildingName(buildingName);
+        
+        excelData.vacancies = excelData.vacancies.filter(v => {
+            const vName = getBuildingName(v);
+            const vCompany = getCompanyName(v);
+            const normalizedVName = normalizeBuildingName(vName);
+            return !(normalizedVName === normalizedName && 
+                    vCompany === company && 
+                    getFloor(v) === '공실없음');
+        });
+    }
+    
+    // 색인 관련 함수들
+    
+    // 한글 초성 추출
+    function getKoreanInitial(char) {
+        const initials = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+        const code = char.charCodeAt(0) - 44032;
+        if (code < 0 || code > 11171) return null;
+        return initials[Math.floor(code / 588)];
+    }
+    
+    // 빌딩명의 첫 글자/초성 추출
+    function getInitialChar(buildingName) {
+        if (!buildingName) return '';
+        
+        const firstChar = buildingName.charAt(0).toUpperCase();
+        
+        // 한글인 경우 초성 반환
+        if (/[가-힣]/.test(firstChar)) {
+            return getKoreanInitial(firstChar);
+        }
+        
+        // 영어인 경우 첫 글자 반환
+        if (/[A-Z]/.test(firstChar)) {
+            return firstChar;
+        }
+        
+        // 숫자나 기타 문자인 경우
+        return '#';
+    }
+    
+    // 특정 초성/글자로 스크롤 이동
+    function scrollToIndex(targetChar) {
+        const buildingGroups = document.querySelectorAll('.building-group:not([style*="display: none"])');
+        let targetElement = null;
+        
+        for (const group of buildingGroups) {
+            const buildingName = group.dataset.buildingName;
+            const initialChar = getInitialChar(buildingName);
+            
+            if (initialChar === targetChar) {
+                targetElement = group;
+                break;
+            }
+        }
+        
+        if (targetElement) {
+            // 활성 색인 업데이트
+            document.querySelectorAll('.index-char').forEach(el => el.classList.remove('active'));
+            document.querySelector(`[data-char="${targetChar}"]`).classList.add('active');
+            
+            // 스크롤 이동
+            targetElement.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+            
+            // 잠시 하이라이트 효과
+            targetElement.style.background = '#e7f3ff';
+            setTimeout(() => {
+                targetElement.style.background = '';
+            }, 1000);
+        }
+    }
+    
+    // 플로팅 색인 상태 업데이트
+    function updateFloatingIndex() {
+        const availableChars = new Set();
+        const buildingGroups = document.querySelectorAll('.building-group:not([style*="display: none"])');
+        
+        // 현재 표시된 빌딩들의 초성/첫 글자 수집
+        buildingGroups.forEach(group => {
+            const buildingName = group.dataset.buildingName;
+            const initialChar = getInitialChar(buildingName);
+            if (initialChar) {
+                availableChars.add(initialChar);
+            }
+        });
+        
+        // 색인 글자들 상태 업데이트
+        document.querySelectorAll('.index-char').forEach(el => {
+            const char = el.dataset.char;
+            if (availableChars.has(char)) {
+                el.classList.remove('disabled');
+            } else {
+                el.classList.add('disabled');
+            }
+            el.classList.remove('active');
+        });
+    }
+    
+    // 빌딩 그룹 표시 (빌딩 + 공실) - 개선된 버전 (검색과 정렬 포함)
+    function displayBuildingGroups() {
+        const buildingList = document.getElementById('buildingList');
+        buildingList.innerHTML = '';
+        
+        console.log('displayBuildingGroups 시작 excelData:', excelData);
+        
+        if (!excelData) {
+            buildingList.innerHTML = '<p class="text-muted text-center">데이터를 로드하세요.</p>';
+            document.getElementById('selectAllControls').style.display = 'none';
+            updateFloatingIndex();
+            updateSearchResultsCount();
+            return;
+        }
+        
+        // 빌딩별로 그룹화 - 개선된 버전
+        const buildingGroupsMap = new Map();
+        
+        // 모든 데이터 소스에서 빌딩과 공실 정보 수집
+        const allItems = [];
+        if (excelData.buildings) allItems.push(...excelData.buildings);
+        if (excelData.vacancies) allItems.push(...excelData.vacancies);
+        if (Array.isArray(excelData) && !excelData.buildings && !excelData.vacancies) allItems.push(...excelData);
+        
+        console.log('전체 아이템 수:', allItems.length);
+        
+        allItems.forEach((item, index) => {
+            const buildingName = getBuildingName(item);
+            const company = getCompanyName(item);
+            const address = getAddress(item);
+            const nearbyStation = getNearbyStation(item);
+            
+            if (!buildingName || !company) {
+                console.log(`아이템 ${index}: 빌딩명 또는 회사명 없음`, item);
+                return;
+            }
+            
+            if (!selectedCompany || company === selectedCompany) {
+                const normalizedName = normalizeBuildingName(buildingName);
+                const key = `${normalizedName}_${company}`;
+                
+                if (!buildingGroupsMap.has(key)) {
+                    buildingGroupsMap.set(key, {
+                        buildingName: buildingName,
+                        address: address,
+                        nearbyStation: nearbyStation,
+                        company: company,
+                        status: item.status || 'undefined',
+                        vacancies: []
+                    });
+                }
+                
+                // 공실 정보 추가
+                const floor = getFloor(item);
+                const area = getArea(item);
+                const rentalArea = getRentalArea(item);
+                
+                if (floor || area || rentalArea) {
+                    const group = buildingGroupsMap.get(key);
+                    const vacancyExists = group.vacancies.some(v => 
+                        v.floor === floor && v.area === area && v.rentalArea === rentalArea
+                    );
+                    
+                    if (!vacancyExists) {
+                        group.vacancies.push({
+                            floor: floor,
+                            area: area,
+                            rentalArea: rentalArea,
+                            status: item.status || 'undefined',
+                            isNoVacancy: item.isNoVacancy || false
+                        });
+                    }
+                }
+            }
+        });
+        
+        // 중복 공실 제거 처리
+        buildingGroupsMap.forEach((group, key) => {
+            if (group.vacancies.length > 1) {
+                const originalCount = group.vacancies.length;
+                group.vacancies = removeDuplicateVacancies(group.vacancies);
+                if (originalCount > group.vacancies.length) {
+                    console.log(`${group.buildingName}: ${originalCount - group.vacancies.length}개 중복 공실 제거`);
+                }
+            }
+        });
+        
+        console.log('그룹화된 빌딩들:', buildingGroupsMap.size, '개');
+        
+        // 그룹 배열로 변환하고 정렬 적용
+        let groups = Array.from(buildingGroupsMap.values());
+        
+        // 정렬 적용
+        if (currentSort === 'page-asc' || currentSort === 'page-desc') {
+            // 페이지 번호로 정렬
+            groups.sort((a, b) => {
+                const pageA = getMappedPage(a.buildingName, a.company);
+                const pageB = getMappedPage(b.buildingName, b.company);
+                
+                // 매핑되지 않은 항목은 뒤로
+                if (!pageA && !pageB) return a.buildingName.localeCompare(b.buildingName, 'ko');
+                if (!pageA) return 1;
+                if (!pageB) return -1;
+                
+                // 페이지 번호 기준 정렬
+                if (currentSort === 'page-asc') {
+                    return pageA - pageB;
+                } else {
+                    return pageB - pageA;
+                }
+            });
+        } else {
+            // 이름순 정렬 (기본)
+            groups.sort((a, b) => {
+                const aInitial = getInitialChar(a.buildingName);
+                const bInitial = getInitialChar(b.buildingName);
+                
+                // 한글과 영어를 구분하여 정렬
+                const aIsKorean = /[ㄱ-ㅎ]/.test(aInitial);
+                const bIsKorean = /[ㄱ-ㅎ]/.test(bInitial);
+                
+                if (aIsKorean && bIsKorean) {
+                    // 둘 다 한글인 경우 가나다 순
+                    return a.buildingName.localeCompare(b.buildingName, 'ko');
+                } else if (!aIsKorean && !bIsKorean) {
+                    // 둘 다 영어인 경우 알파벳 순
+                    return a.buildingName.localeCompare(b.buildingName, 'en');
+                } else {
+                    // 한글을 먼저, 영어를 나중에
+                    return aIsKorean ? -1 : 1;
+                }
+            });
+        }
+        
+        if (groups.length === 0) {
+            buildingList.innerHTML = '<p class="text-muted text-center">해당 회사의 빌딩이 없습니다.</p>';
+            document.getElementById('selectAllControls').style.display = 'none';
+            updateFloatingIndex();
+            updateSearchResultsCount();
+            return;
+        }
+        
+        console.log('표시할 그룹 수:', groups.length);
+        document.getElementById('selectAllControls').style.display = 'block';
+        
+        groups.forEach(group => {
+            const groupElement = createBuildingGroup(group);
+            buildingList.appendChild(groupElement);
+        });
+        
+        // 필터 적용
+        applyFilters();
+        
+        // 색인 업데이트
+        updateFloatingIndex();
+        
+        // 검색 결과 개수 업데이트
+        updateSearchResultsCount();
+    }
+    
+    // 빌딩 그룹 요소 생성 - 개선된 버전 (삭제 버튼 포함)
+    function createBuildingGroup(group) {
+        const div = document.createElement('div');
+        div.className = 'building-group';
+        div.dataset.buildingName = group.buildingName;
+        div.dataset.company = group.company;
+        div.dataset.status = group.status;
+        
+        const normalizedName = normalizeBuildingName(group.buildingName);
+        const key = `${normalizedName}_${group.company}`;
+        const isVacant = vacantBuildings.has(key);
+        
+        const mappedPage = getMappedPage(group.buildingName, group.company);
+        if (mappedPage) {
+            div.classList.add('mapped');
+        }
+        
+        // 검색 매칭 표시
+        if (searchQuery && isMatchingSearch(group)) {
+            div.classList.add('search-matched');
+        }
+        
+        // 이전 백업과 비교
+        if (comparisonMode && backupData.length > 0) {
+            const lastBackup = backupData[backupData.length - 1];
+            const prevMapped = getPreviousMappedPage(group.buildingName, group.company, lastBackup.mappingData);
+            if (prevMapped !== mappedPage) {
+                div.classList.add('has-previous');
+            }
+        }
+        
+        // 빌딩 헤더
+        const header = document.createElement('div');
+        header.className = 'building-header';
+        if (mappedPage) header.classList.add('mapped');
+        if (isVacant) header.classList.add('vacant');
+        
+        const nearbyStationInfo = group.nearbyStation ? `<div class="building-address">${group.nearbyStation}</div>` : '';
+        
+        header.innerHTML = `
+            <div class="previous-state-indicator">변경됨</div>
+            <div class="building-info">
+                <div class="building-name">${group.buildingName}</div>
+                ${group.address ? `<div class="building-address">${group.address}</div>` : ''}
+                ${nearbyStationInfo}
+            </div>
+            <div class="building-controls">
+                <div class="building-controls-row primary">
+                    <input type="checkbox" class="building-checkbox" onclick="event.stopPropagation();">
+                    <button class="edit-building-btn" onclick="openBuildingEditModal('${group.buildingName}', '${group.company}'); event.stopPropagation();">
+                        <i class="bi bi-pencil"></i> 편집
+                    </button>
+                    <button class="delete-building-btn" onclick="deleteBuilding('${group.buildingName}', '${group.company}'); event.stopPropagation();">
+                        <i class="bi bi-trash"></i> 삭제
+                    </button>
+                    <div class="page-mapping-input">
+                        <input type="number" placeholder="페이지" min="1" 
+                               onkeypress="if(event.key==='Enter') addMappingFromInput('${group.buildingName}', '${group.company}', this); event.stopPropagation();" 
+                               onclick="event.stopPropagation();">
+                        <button onclick="addMappingFromInput('${group.buildingName}', '${group.company}', this.previousElementSibling); event.stopPropagation();">매핑</button>
+                    </div>
+                    ${mappedPage ? `<span class="badge bg-success">${mappedPage}p</span>` : ''}
+                </div>
+                <div class="building-controls-row secondary">
+                    <button class="vacant-toggle ${isVacant ? 'active' : ''}" 
+                            onclick="toggleVacant('${group.buildingName}', '${group.company}', event)">
+                        ${isVacant ? '공실해제' : '공실처리'}
+                    </button>
+                    <div class="status-control-group">
+                        <span class="status-badge ${group.status}">${getStatusLabel(group.status)}</span>
+                        <button class="group-status-toggle" onclick="toggleGroupStatus('${group.buildingName}', '${group.company}', event)">
+                            <i class="bi bi-arrow-repeat"></i> 일괄
+                        </button>
+                    </div>
+                    ${group.vacancies.length > 0 ? `
+                        <button class="expand-toggle" onclick="toggleExpand('${normalizedName}_${group.company}', event)">
+                            <i class="bi bi-chevron-down"></i> ${group.vacancies.length}개
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+        
+        header.addEventListener('click', () => selectBuilding(group, header));
+        div.appendChild(header);
+        
+        // 비교 뷰
+        if (comparisonMode && backupData.length > 0) {
+            const comparisonView = createComparisonView(group);
+            div.appendChild(comparisonView);
+        }
+        
+        // 공실 리스트
+        if (group.vacancies.length > 0) {
+            const vacancyList = document.createElement('div');
+            vacancyList.className = 'vacancy-list';
+            vacancyList.id = `vacancy_${normalizedName}_${group.company}`;
+            
+            if (expandedGroups.has(`${normalizedName}_${group.company}`)) {
+                vacancyList.classList.add('expanded');
+            }
+            
+            group.vacancies.forEach(vacancy => {
+                const vacancyItem = document.createElement('div');
+                vacancyItem.className = 'vacancy-item';
+                if (vacancy.isNoVacancy) {
+                    vacancyItem.classList.add('no-vacancy');
+                }
+                
+                vacancyItem.innerHTML = `
+                    <div class="vacancy-info">
+                        <div class="vacancy-floor">층: ${vacancy.floor}</div>
+                        <div class="vacancy-area">전용면적: ${vacancy.area} | 임대면적: ${vacancy.rentalArea}</div>
+                    </div>
+                    <div class="status-control-group">
+                        <span class="status-badge ${vacancy.status}">${getStatusLabel(vacancy.status)}</span>
+                    </div>
+                `;
+                
+                vacancyList.appendChild(vacancyItem);
+            });
+            
+            div.appendChild(vacancyList);
+        }
+        
+        return div;
+    }
+    
+    // 비교 뷰 생성
+    function createComparisonView(group) {
+        const view = document.createElement('div');
+        view.className = 'comparison-view';
+        
+        if (backupData.length > 0) {
+            const lastBackup = backupData[backupData.length - 1];
+            const prevPage = getPreviousMappedPage(group.buildingName, group.company, lastBackup.mappingData);
+            const currPage = getMappedPage(group.buildingName, group.company);
+            
+            view.innerHTML = `
+                <div class="comparison-item">
+                    <span class="comparison-label">이전 매핑:</span>
+                    <span class="comparison-value">${prevPage || '없음'}</span>
+                </div>
+                <div class="comparison-item">
+                    <span class="comparison-label">현재 매핑:</span>
+                    <span class="comparison-value">${currPage || '없음'}</span>
+                </div>
+                <div class="comparison-item">
+                    <span class="comparison-label">변경일시:</span>
+                    <span class="comparison-value">${new Date(lastBackup.timestamp).toLocaleString()}</span>
+                </div>
+            `;
+        }
+        
+        return view;
+    }
+    
+    // 이전 매핑 페이지 가져오기
+    function getPreviousMappedPage(buildingName, company, prevMappingData) {
+        const normalizedName = normalizeBuildingName(buildingName);
+        
+        for (const fileName in prevMappingData) {
+            const fileData = prevMappingData[fileName];
+            if (fileData.company === company) {
+                // 정규화된 이름으로 찾기
+                for (const buildingKey in fileData.buildings) {
+                    if (normalizeBuildingName(buildingKey) === normalizedName) {
+                        return fileData.buildings[buildingKey];
+                    }
+                }
+            }
+        }
+        return null;
+    }
+    
+    // 그룹 확장/축소 토글
+    function toggleExpand(groupId, event) {
+        event.stopPropagation();
+        const vacancyList = document.getElementById(`vacancy_${groupId}`);
+        const button = event.currentTarget;
+        const icon = button.querySelector('i');
+        
+        if (vacancyList.classList.contains('expanded')) {
+            vacancyList.classList.remove('expanded');
+            icon.className = 'bi bi-chevron-down';
+            expandedGroups.delete(groupId);
+        } else {
+            vacancyList.classList.add('expanded');
+            icon.className = 'bi bi-chevron-up';
+            expandedGroups.add(groupId);
+        }
+    }
+    
+    // 그룹 상태 일괄 변경
+    function toggleGroupStatus(buildingName, company, event) {
+        event.stopPropagation();
+        
+        const currentStatus = getBuildingStatus(buildingName, company);
+        let newStatus;
+        
+        switch(currentStatus) {
+            case 'undefined':
+                newStatus = 'active';
+                break;
+            case 'active':
+                newStatus = 'inactive';
+                break;
+            case 'inactive':
+                newStatus = 'undefined';
+                break;
+            default:
+                newStatus = 'active';
+        }
+        
+        // 빌딩과 모든 공실 상태 업데이트
+        updateBuildingStatus(buildingName, company, newStatus);
+        updateVacanciesStatus(buildingName, company, newStatus);
+        
+        displayBuildingGroups();
+        
+        if (autoSave) {
+            saveMapping();
+        }
+        
+        showStatus(`${buildingName}의 모든 항목이 ${getStatusLabel(newStatus)}(으)로 변경되었습니다.`, 'success');
+    }
+    
+    // 빌딩 상태 가져오기 - 개선된 버전
+    function getBuildingStatus(buildingName, company) {
+        if (!excelData) return 'undefined';
+        
+        const normalizedName = normalizeBuildingName(buildingName);
+        
+        // 모든 데이터 소스에서 찾기
+        const allItems = [];
+        if (excelData.buildings) allItems.push(...excelData.buildings);
+        if (excelData.vacancies) allItems.push(...excelData.vacancies);
+        if (Array.isArray(excelData) && !excelData.buildings && !excelData.vacancies) allItems.push(...excelData);
+        
+        const found = allItems.find(item => {
+            const bName = getBuildingName(item);
+            const bCompany = getCompanyName(item);
+            const normalizedBName = normalizeBuildingName(bName);
+            return normalizedBName === normalizedName && bCompany === company;
+        });
+        
+        return found ? (found.status || 'undefined') : 'undefined';
+    }
+    
+    // 빌딩 상태 업데이트 - 개선된 버전
+    function updateBuildingStatus(buildingName, company, newStatus) {
+        if (!excelData) return;
+        
+        const normalizedName = normalizeBuildingName(buildingName);
+        
+        // 모든 데이터 소스에서 업데이트
+        const allSources = [
+            excelData.buildings || [],
+            excelData.vacancies || [],
+            Array.isArray(excelData) && !excelData.buildings && !excelData.vacancies ? excelData : []
+        ].filter(arr => arr.length > 0);
+        
+        allSources.forEach(source => {
+            source.forEach(item => {
+                const bName = getBuildingName(item);
+                const bCompany = getCompanyName(item);
+                const normalizedBName = normalizeBuildingName(bName);
+                
+                if (normalizedBName === normalizedName && bCompany === company) {
+                    item.status = newStatus;
+                }
+            });
+        });
+    }
+    
+    // 공실 상태 일괄 업데이트 - 개선된 버전
+    function updateVacanciesStatus(buildingName, company, newStatus) {
+        if (!excelData) return;
+        
+        const normalizedName = normalizeBuildingName(buildingName);
+        
+        // 모든 데이터 소스에서 업데이트
+        const allSources = [
+            excelData.buildings || [],
+            excelData.vacancies || [],
+            Array.isArray(excelData) && !excelData.buildings && !excelData.vacancies ? excelData : []
+        ].filter(arr => arr.length > 0);
+        
+        allSources.forEach(source => {
+            source.forEach(item => {
+                const vName = getBuildingName(item);
+                const vCompany = getCompanyName(item);
+                const normalizedVName = normalizeBuildingName(vName);
+                
+                if (normalizedVName === normalizedName && vCompany === company) {
+                    // 공실 정보가 있는 경우에만
+                    const floor = getFloor(item);
+                    const area = getArea(item);
+                    const rentalArea = getRentalArea(item);
+                    
+                    if (floor || area || rentalArea) {
+                        item.status = newStatus;
+                    }
+                }
+            });
+        });
+    }
+    
+    // Status 라벨 반환
+    function getStatusLabel(status) {
+        switch(status) {
+            case 'active': return '노출';
+            case 'inactive': return '비노출';
+            case 'undefined': return '미설정';
+            default: return status;
+        }
+    }
+    
+    // 전체 선택/해제
+    function handleSelectAll(event) {
+        const checkboxes = document.querySelectorAll('.building-group:not([style*="display: none"]) .building-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = event.target.checked;
+        });
+    }
+    
+    // 매핑 전체 선택/해제
+    function handleSelectAllMappings(event) {
+        const checkboxes = document.querySelectorAll('.mapping-item-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = event.target.checked;
+        });
+    }
+    
+    // 일괄 매핑 삭제
+    function bulkRemoveMappings() {
+        const checked = document.querySelectorAll('.mapping-item-checkbox:checked');
+        if (checked.length === 0) {
+            showStatus('선택된 매핑이 없습니다.', 'error');
+            return;
+        }
+        
+        if (confirm(`${checked.length}개의 매핑을 삭제하시겠습니까?`)) {
+            checked.forEach(checkbox => {
+                const item = checkbox.closest('.mapping-item');
+                const fileName = item.dataset.fileName;
+                const buildingName = item.dataset.buildingName;
+                
+                if (mappingData[fileName] && mappingData[fileName].buildings[buildingName]) {
+                    delete mappingData[fileName].buildings[buildingName];
+                    
+                    if (Object.keys(mappingData[fileName].buildings).length === 0) {
+                        delete mappingData[fileName];
+                    }
+                }
+            });
+            
+            updateMappingDisplay();
+            displayBuildingGroups();
+            
+            if (autoSave) {
+                saveMapping();
+            }
+            
+            showStatus(`${checked.length}개의 매핑이 삭제되었습니다.`, 'success');
+        }
+    }
+    
+    // 일괄 매핑 상태 업데이트
+    function bulkUpdateMappingStatus(status) {
+        const checked = document.querySelectorAll('.mapping-item-checkbox:checked');
+        if (checked.length === 0) {
+            showStatus('선택된 매핑이 없습니다.', 'error');
+            return;
+        }
+        
+        checked.forEach(checkbox => {
+            const item = checkbox.closest('.mapping-item');
+            const buildingName = item.dataset.buildingName;
+            const company = item.dataset.company;
+            
+            updateBuildingStatus(buildingName, company, status);
+            updateVacanciesStatus(buildingName, company, status);
+        });
+        
+        displayBuildingGroups();
+        
+        if (autoSave) {
+            saveMapping();
+        }
+        
+        showStatus(`${checked.length}개 빌딩의 상태가 ${getStatusLabel(status)}(으)로 변경되었습니다.`, 'success');
+    }
+    
+    // 일괄 상태 업데이트
+    function bulkUpdateAllStatus(status) {
+        const checkedBoxes = document.querySelectorAll('.building-checkbox:checked');
+        if (checkedBoxes.length === 0) {
+            showStatus('선택된 빌딩이 없습니다.', 'error');
+            return;
+        }
+        
+        checkedBoxes.forEach(checkbox => {
+            const group = checkbox.closest('.building-group');
+            const buildingName = group.dataset.buildingName;
+            const company = group.dataset.company;
+            
+            updateBuildingStatus(buildingName, company, status);
+            updateVacanciesStatus(buildingName, company, status);
+        });
+        
+        displayBuildingGroups();
+        
+        if (autoSave) {
+            saveMapping();
+        }
+        
+        showStatus(`${checkedBoxes.length}개 빌딩의 상태가 ${getStatusLabel(status)}(으)로 변경되었습니다.`, 'success');
+    }
+    
+    // 일괄 공실처리
+    function bulkVacantProcess() {
+        const checkedBoxes = document.querySelectorAll('.building-checkbox:checked');
+        if (checkedBoxes.length === 0) {
+            showStatus('선택된 빌딩이 없습니다.', 'error');
+            return;
+        }
+        
+        // 확인 메시지
+        if (!confirm(`선택한 ${checkedBoxes.length}개 빌딩을 모두 공실처리 하시겠습니까?\n\n• 모든 공실이 비노출 처리됩니다.\n• "공실없음" 항목이 추가됩니다.`)) {
+            return;
+        }
+        
+        let processedCount = 0;
+        let alreadyVacantCount = 0;
+        
+        checkedBoxes.forEach(checkbox => {
+            const group = checkbox.closest('.building-group');
+            const buildingName = group.dataset.buildingName;
+            const company = group.dataset.company;
+            const normalizedName = normalizeBuildingName(buildingName);
+            const key = `${normalizedName}_${company}`;
+            
+            if (vacantBuildings.has(key)) {
+                // 이미 공실처리된 빌딩
+                alreadyVacantCount++;
+            } else {
+                // 공실처리
+                vacantBuildings.add(key);
+                
+                // 모든 공실 비노출 처리
+                updateVacanciesStatus(buildingName, company, 'inactive');
+                
+                // "공실없음" 항목 추가
+                addNoVacancyItem(buildingName, company);
+                
+                processedCount++;
+            }
+        });
+        
+        // 체크박스 해제
+        document.getElementById('selectAllCheckbox').checked = false;
+        checkedBoxes.forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        
+        displayBuildingGroups();
+        
+        if (autoSave) {
+            saveMapping();
+        }
+        
+        // 결과 메시지
+        let message = '';
+        if (processedCount > 0) {
+            message += `${processedCount}개 빌딩이 공실처리되었습니다.`;
+        }
+        if (alreadyVacantCount > 0) {
+            if (message) message += ' ';
+            message += `${alreadyVacantCount}개 빌딩은 이미 공실처리된 상태입니다.`;
+        }
+        
+        showStatus(message, 'success');
+    }
+    
+    // 필터 변경 처리
+    function handleFilterChange(event) {
+        const btn = event.currentTarget;
+        const filterType = btn.dataset.filter || btn.dataset.statusFilter;
+        
+        if (btn.dataset.filter) {
+            document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentFilter = filterType;
+        } else if (btn.dataset.statusFilter) {
+            document.querySelectorAll('[data-status-filter]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentStatusFilter = filterType;
+        }
+        
+        applyFilters();
+    }
+    
+    // 필터 적용
+    function applyFilters() {
+        const groups = document.querySelectorAll('.building-group');
+        
+        groups.forEach(group => {
+            const isMapped = group.classList.contains('mapped');
+            const status = group.dataset.status;
+            
+            let shouldShow = true;
+            
+            // 검색 필터
+            if (searchQuery) {
+                const groupData = {
+                    buildingName: group.dataset.buildingName,
+                    address: group.querySelector('.building-address')?.textContent || '',
+                    nearbyStation: ''
+                };
+                shouldShow = shouldShow && isMatchingSearch(groupData);
+            }
+            
+            // 매핑 필터
+            if (currentFilter === 'mapped' && !isMapped) shouldShow = false;
+            if (currentFilter === 'unmapped' && isMapped) shouldShow = false;
+            
+            // 상태 필터
+            if (currentStatusFilter !== 'all' && status !== currentStatusFilter) shouldShow = false;
+            
+            group.style.display = shouldShow ? 'block' : 'none';
+        });
+        
+        // 필터 적용 후 색인 업데이트 (매핑되지 않은 빌딩만 대상)
+        updateFloatingIndex();
+    }
+    
+    // 빌딩 선택
+    function selectBuilding(building, element) {
+        document.querySelectorAll('.building-header').forEach(item => {
+            item.classList.remove('selected');
+        });
+        
+        element.classList.add('selected');
+        selectedBuilding = building;
+        
+        document.getElementById('selectedBuilding').textContent = building.buildingName;
+        
+        if (selectedPage) {
+            addMapping();
+        }
+    }
+    
+    // PDF 업로드 처리
+    async function handlePdfUpload(event) {
+        const file = event.target.files[0];
+        if (file) {
+            await handlePdfFile(file);
+        }
+    }
+    
+    // PDF 파일 처리
+    async function handlePdfFile(file) {
+        try {
+            showStatus('PDF를 로드하는 중...', 'success');
+            
+            const arrayBuffer = await file.arrayBuffer();
+            const loadingTask = pdfjsLib.getDocument({
+                data: arrayBuffer,
+                cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+                cMapPacked: true
+            });
+            
+            pdfDoc = await loadingTask.promise;
+            
+            document.getElementById('pdfFileName').textContent = file.name;
+            document.getElementById('totalPages').textContent = pdfDoc.numPages;
+            
+            document.getElementById('pdfUploadArea').style.display = 'none';
+            document.getElementById('pdfControls').style.display = 'flex';
+            document.getElementById('pdfPagination').style.display = 'block';
+            document.getElementById('pageNavigationBar').style.display = 'flex';
+            
+            // 페이지 입력 필드 최댓값 설정
+            document.getElementById('goToPageInput').max = pdfDoc.numPages;
+            
+            // 슬라이더 설정
+            const slider = document.getElementById('pageSlider');
+            slider.max = Math.ceil(pdfDoc.numPages / itemsPerPage);
+            slider.value = 1;
+            
+            await renderThumbnails();
+            
+            showStatus('PDF를 성공적으로 불러왔습니다.', 'success');
+            
+        } catch (error) {
+            console.error('PDF 로드 실패:', error);
+            showStatus('PDF 로드 실패: ' + error.message, 'error');
+        }
+    }
+    
+    // 뷰 모드 변경
+    function handleViewModeChange(event) {
+        itemsPerPage = parseInt(event.target.value);
+        currentPage = 1;
+        
+        const thumbnailsContainer = document.getElementById('pdfThumbnails');
+        thumbnailsContainer.className = `pdf-thumbnails grid-${itemsPerPage}`;
+        
+        if (pdfDoc) {
+            // 슬라이더 최댓값 업데이트
+            const slider = document.getElementById('pageSlider');
+            slider.max = Math.ceil(pdfDoc.numPages / itemsPerPage);
+            slider.value = 1;
+            
+            renderThumbnails();
+        }
+    }
+    
+    // 썸네일 렌더링
+    async function renderThumbnails() {
+        const container = document.getElementById('pdfThumbnails');
+        container.innerHTML = '';
+        
+        const totalPages = pdfDoc.numPages;
+        const startPage = (currentPage - 1) * itemsPerPage + 1;
+        const endPage = Math.min(startPage + itemsPerPage - 1, totalPages);
+        
+        for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
+            const thumbnailDiv = document.createElement('div');
+            thumbnailDiv.className = 'pdf-thumbnail';
+            thumbnailDiv.dataset.pageNum = pageNum;
+            
+            // 로딩 표시
+            thumbnailDiv.innerHTML = `
+                <div class="pdf-thumbnail-loading">
+                    <div class="loading-spinner"></div>
+                </div>
+                <div class="page-number">페이지 ${pageNum}</div>
+            `;
+            
+            container.appendChild(thumbnailDiv);
+            
+            thumbnailDiv.addEventListener('click', () => selectPage(pageNum, thumbnailDiv));
+            
+            // 호버 이벤트 추가
+            thumbnailDiv.addEventListener('mouseenter', (e) => showHoverPreview(e, pageNum));
+            thumbnailDiv.addEventListener('mouseleave', hideHoverPreview);
+            
+            await renderThumbnail(pageNum, thumbnailDiv);
+        }
+        
+        updatePagination();
+        updatePageIndicators();
+    }
+    
+    // 개별 썸네일 렌더링
+    async function renderThumbnail(pageNum, container) {
+        try {
+            const page = await pdfDoc.getPage(pageNum);
+            const viewport = page.getViewport({ scale: 1 });
+            
+            // 가로형 비율 유지하면서 크기 조정
+            let targetHeight;
+            switch(itemsPerPage) {
+                case 1:
+                    targetHeight = 400;
+                    break;
+                case 4:
+                    targetHeight = 250;
+                    break;
+                case 10:
+                    targetHeight = 150;
+                    break;
+                default:
+                    targetHeight = 200;
+            }
+            
+            const scale = targetHeight / viewport.height;
+            const scaledViewport = page.getViewport({ scale: scale });
+            
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            
+            canvas.width = scaledViewport.width;
+            canvas.height = scaledViewport.height;
+            
+            context.fillStyle = 'white';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            
+            await page.render({
+                canvasContext: context,
+                viewport: scaledViewport
+            }).promise;
+            
+            const loadingDiv = container.querySelector('.pdf-thumbnail-loading');
+            if (loadingDiv) {
+                loadingDiv.remove();
+            }
+            
+            container.insertBefore(canvas, container.querySelector('.page-number'));
+            
+        } catch (error) {
+            console.error(`페이지 ${pageNum} 렌더링 실패:`, error);
+        }
+    }
+    
+    // 호버 프리뷰 표시 (크기 2배로 증가)
+    async function showHoverPreview(event, pageNum) {
+        const preview = document.getElementById('hoverPreview');
+        const thumbnail = event.currentTarget;
+        const rect = thumbnail.getBoundingClientRect();
+        
+        // 위치 설정 (썸네일 옆에)
+        preview.style.left = `${rect.right + 10}px`;
+        preview.style.top = `${rect.top}px`;
+        preview.style.display = 'block';
+        
+        // 확대된 버전 렌더링
+        try {
+            const page = await pdfDoc.getPage(pageNum);
+            const scale = 3.0;
+            const viewport = page.getViewport({ scale: scale });
+            
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            canvas.style.maxWidth = '800px';
+            canvas.style.height = 'auto';
+            
+            await page.render({
+                canvasContext: context,
+                viewport: viewport
+            }).promise;
+            
+            preview.innerHTML = '';
+            preview.appendChild(canvas);
+            
+        } catch (error) {
+            console.error('프리뷰 생성 실패:', error);
+        }
+    }
+    
+    // 호버 프리뷰 숨기기
+    function hideHoverPreview() {
+        const preview = document.getElementById('hoverPreview');
+        preview.style.display = 'none';
+        preview.innerHTML = '';
+    }
+    
+    // 페이지네이션 업데이트
+    function updatePagination() {
+        const totalPages = Math.ceil(pdfDoc.numPages / itemsPerPage);
+        const paginationContainer = document.querySelector('#pdfPagination ul');
+        paginationContainer.innerHTML = '';
+        
+        if (totalPages <= 1) {
+            document.getElementById('pdfPagination').style.display = 'none';
+            return;
+        }
+        
+        // 이전 버튼
+        const prevLi = document.createElement('li');
+        prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+        prevLi.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${currentPage - 1}); return false;">이전</a>`;
+        paginationContainer.appendChild(prevLi);
+        
+        // 페이지 번호
+        for (let i = 1; i <= Math.min(totalPages, 10); i++) {
+            const li = document.createElement('li');
+            li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+            li.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${i}); return false;">${i}</a>`;
+            paginationContainer.appendChild(li);
+        }
+        
+        // 다음 버튼
+        const nextLi = document.createElement('li');
+        nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+        nextLi.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${currentPage + 1}); return false;">다음</a>`;
+        paginationContainer.appendChild(nextLi);
+    }
+    
+    // 페이지 이동
+    function goToPage(page) {
+        const totalPages = Math.ceil(pdfDoc.numPages / itemsPerPage);
+        if (page >= 1 && page <= totalPages) {
+            currentPage = page;
+            renderThumbnails();
+            updatePageIndicators();
+        }
+    }
+    
+    // 특정 페이지로 이동 (입력 필드에서)
+    function goToSpecificPage() {
+        const input = document.getElementById('goToPageInput');
+        const pageNum = parseInt(input.value);
+        
+        if (!pdfDoc) {
+            showStatus('PDF를 먼저 로드하세요.', 'error');
+            return;
+        }
+        
+        if (isNaN(pageNum) || pageNum < 1 || pageNum > pdfDoc.numPages) {
+            showStatus(`1부터 ${pdfDoc.numPages} 사이의 페이지 번호를 입력하세요.`, 'error');
+            return;
+        }
+        
+        // 해당 페이지가 포함된 페이지 그룹으로 이동
+        const targetPage = Math.ceil(pageNum / itemsPerPage);
+        goToPage(targetPage);
+        
+        // 특정 썸네일 하이라이트
+        setTimeout(() => {
+            const thumbnail = document.querySelector(`[data-page-num="${pageNum}"]`);
+            if (thumbnail) {
+                thumbnail.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                thumbnail.classList.add('selected');
+                setTimeout(() => {
+                    thumbnail.classList.remove('selected');
+                }, 2000);
+            }
+        }, 300);
+        
+        input.value = '';
+        showStatus(`${pageNum}페이지로 이동했습니다.`, 'success');
+    }
+    
+    // 빠른 페이지 이동 모달 열기
+    function openQuickPageModal() {
+        if (!pdfDoc) return;
+        
+        document.getElementById('maxPageNumber').textContent = pdfDoc.numPages;
+        document.getElementById('quickPageModal').classList.add('show');
+        document.getElementById('quickPageOverlay').classList.add('show');
+        
+        const input = document.getElementById('quickPageInput');
+        input.value = '';
+        input.focus();
+    }
+    
+    // 빠른 페이지 이동 모달 닫기
+    function closeQuickPageModal() {
+        document.getElementById('quickPageModal').classList.remove('show');
+        document.getElementById('quickPageOverlay').classList.remove('show');
+    }
+    
+    // 빠른 페이지 이동
+    function quickGoToPage() {
+        const input = document.getElementById('quickPageInput');
+        const pageNum = parseInt(input.value);
+        
+        if (isNaN(pageNum) || pageNum < 1 || pageNum > pdfDoc.numPages) {
+            showStatus(`1부터 ${pdfDoc.numPages} 사이의 페이지 번호를 입력하세요.`, 'error');
+            return;
+        }
+        
+        // 해당 페이지가 포함된 페이지 그룹으로 이동
+        const targetPage = Math.ceil(pageNum / itemsPerPage);
+        goToPage(targetPage);
+        
+        // 특정 썸네일 하이라이트
+        setTimeout(() => {
+            const thumbnail = document.querySelector(`[data-page-num="${pageNum}"]`);
+            if (thumbnail) {
+                thumbnail.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                thumbnail.classList.add('selected');
+                setTimeout(() => {
+                    thumbnail.classList.remove('selected');
+                }, 2000);
+            }
+        }, 300);
+        
+        closeQuickPageModal();
+        showStatus(`${pageNum}페이지로 이동했습니다.`, 'success');
+    }
+    
+    // 이전 페이지 그룹으로
+    function goToPreviousPage() {
+        if (!pdfDoc) return;
+        
+        const totalPages = Math.ceil(pdfDoc.numPages / itemsPerPage);
+        if (currentPage > 1) {
+            goToPage(currentPage - 1);
+        }
+    }
+    
+    // 다음 페이지 그룹으로
+    function goToNextPage() {
+        if (!pdfDoc) return;
+        
+        const totalPages = Math.ceil(pdfDoc.numPages / itemsPerPage);
+        if (currentPage < totalPages) {
+            goToPage(currentPage + 1);
+        }
+    }
+    
+    // 슬라이더로 페이지 이동
+    function goToSliderPage() {
+        const slider = document.getElementById('pageSlider');
+        const page = parseInt(slider.value);
+        goToPage(page);
+    }
+    
+    // 페이지 표시 업데이트
+    function updatePageIndicators() {
+        if (!pdfDoc) return;
+        
+        const totalPages = Math.ceil(pdfDoc.numPages / itemsPerPage);
+        const startPage = (currentPage - 1) * itemsPerPage + 1;
+        const endPage = Math.min(startPage + itemsPerPage - 1, pdfDoc.numPages);
+        
+        // 현재 페이지 표시
+        document.getElementById('currentPageIndicator').textContent = 
+            `${startPage}-${endPage} / ${pdfDoc.numPages}`;
+        
+        // 슬라이더 업데이트
+        document.getElementById('pageSlider').value = currentPage;
+    }
+    
+    // 페이지 선택
+    function selectPage(pageNum, element) {
+        document.querySelectorAll('.pdf-thumbnail').forEach(item => {
+            item.classList.remove('selected');
+        });
+        
+        element.classList.add('selected');
+        selectedPage = pageNum;
+        
+        document.getElementById('selectedPage').textContent = pageNum;
+        
+        if (selectedBuilding) {
+            addMapping();
+        }
+    }
+    
+    // 매핑 추가
+    function addMapping() {
+        if (!selectedBuilding || !selectedPage) return;
+        
+        const fileName = document.getElementById('pdfFileName').textContent;
+        
+        if (!mappingData[fileName]) {
+            mappingData[fileName] = {
+                fileName: fileName,
+                company: selectedCompany,
+                buildings: {}
+            };
+        }
+        
+        mappingData[fileName].buildings[selectedBuilding.buildingName] = selectedPage;
+        
+        updateMappingDisplay();
+        updateCompanyMappingCounts();
+        displayBuildingGroups();
+        
+        selectedBuilding = null;
+        selectedPage = null;
+        document.getElementById('selectedBuilding').textContent = '-';
+        document.getElementById('selectedPage').textContent = '-';
+        
+        document.querySelectorAll('.building-header.selected').forEach(item => {
+            item.classList.remove('selected');
+        });
+        document.querySelectorAll('.pdf-thumbnail.selected').forEach(item => {
+            item.classList.remove('selected');
+        });
+        
+        if (autoSave) {
+            saveMapping();
+        }
+        
+        showStatus('매핑이 추가되었습니다.', 'success');
+    }
+    
+    // 매핑된 페이지 가져오기
+    function getMappedPage(buildingName, company) {
+        const normalizedName = normalizeBuildingName(buildingName);
+        
+        for (const fileName in mappingData) {
+            const fileData = mappingData[fileName];
+            if (fileData.company === company) {
+                // 정규화된 이름으로 찾기
+                for (const buildingKey in fileData.buildings) {
+                    if (normalizeBuildingName(buildingKey) === normalizedName) {
+                        return fileData.buildings[buildingKey];
+                    }
+                }
+            }
+        }
+        return null;
+    }
+    
+    // 매핑 정보 표시
+    function updateMappingDisplay() {
+        const container = document.getElementById('mappingInfo');
+        container.innerHTML = '';
+        
+        const files = Object.keys(mappingData);
+        if (files.length === 0) {
+            container.innerHTML = '<p class="text-muted text-center small">매핑된 정보가 없습니다.</p>';
+            document.getElementById('mappingCount').textContent = '(0건)';
+            return;
+        }
+        
+        let totalCount = 0;
+        
+        files.forEach(fileName => {
+            const fileData = mappingData[fileName];
+            const buildingEntries = Object.entries(fileData.buildings || {});
+            
+            if (buildingEntries.length === 0) return;
+            
+            // 회사 필터 적용
+            if (currentCompanyFilter !== 'all' && fileData.company !== currentCompanyFilter) return;
+            
+            totalCount += buildingEntries.length;
+            
+            const fileGroup = document.createElement('div');
+            fileGroup.className = 'mapping-file-group';
+            
+            const fileHeader = document.createElement('div');
+            fileHeader.className = 'mapping-file-header';
+            fileHeader.innerHTML = `
+                <div>
+                    <i class="bi bi-file-earmark-pdf"></i> ${fileName}
+                    <span class="text-muted small ms-2">(${fileData.company})</span>
+                </div>
+                <span class="badge bg-primary">${buildingEntries.length}건</span>
+            `;
+            fileGroup.appendChild(fileHeader);
+            
+            buildingEntries.forEach(([buildingName, pageNum]) => {
+                const item = document.createElement('div');
+                item.className = 'mapping-item';
+                item.dataset.fileName = fileName;
+                item.dataset.buildingName = buildingName;
+                item.dataset.company = fileData.company;
+                
+                item.innerHTML = `
+                    <input type="checkbox" class="mapping-item-checkbox form-check-input">
+                    <div class="mapping-item-content">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>${buildingName}</span>
+                            <div>
+                                <span class="text-primary">${pageNum}페이지</span>
+                                <button class="btn btn-sm text-danger ms-2" onclick="removeMapping('${fileName}', '${buildingName}')">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                fileGroup.appendChild(item);
+            });
+            
+            container.appendChild(fileGroup);
+        });
+        
+        document.getElementById('mappingCount').textContent = `(${totalCount}건)`;
+    }
+    
+    // 매핑 제거
+    function removeMapping(fileName, buildingName) {
+        if (mappingData[fileName] && mappingData[fileName].buildings[buildingName]) {
+            delete mappingData[fileName].buildings[buildingName];
+            
+            if (Object.keys(mappingData[fileName].buildings).length === 0) {
+                delete mappingData[fileName];
+            }
+            
+            updateMappingDisplay();
+            updateCompanyMappingCounts();
+            displayBuildingGroups();
+            
+            if (autoSave) {
+                saveMapping();
+            }
+            
+            showStatus('매핑이 제거되었습니다.', 'success');
+        }
+    }
+    
+    // 매핑 저장
+    function saveMapping() {
+        if (!excelData && Object.keys(mappingData).length === 0) {
+            showStatus('저장할 데이터가 없습니다.', 'error');
+            return;
+        }
+        
+        // Excel 데이터와 매핑 데이터를 localStorage에 저장
+        if (excelData) {
+            localStorage.setItem('excelData', JSON.stringify(excelData));
+        }
+        
+        if (Object.keys(mappingData).length > 0) {
+            localStorage.setItem('mappingData', JSON.stringify(mappingData));
+        }
+        
+        // 공실 처리 상태 저장
+        localStorage.setItem('vacantBuildings', JSON.stringify(Array.from(vacantBuildings)));
+        
+        showStatus('데이터가 저장되었습니다.', 'success');
+    }
+    
+    // 매핑 내보내기 (매핑 정보만)
+    function exportMapping() {
+        if (Object.keys(mappingData).length === 0) {
+            showStatus('내보낼 매핑 정보가 없습니다.', 'error');
+            return;
+        }
+        
+        const exportData = {
+            version: "2.0",
+            created: new Date().toISOString(),
+            pdfs: []
+        };
+        
+        Object.keys(mappingData).forEach(fileName => {
+            const fileData = mappingData[fileName];
+            exportData.pdfs.push({
+                fileName: fileData.fileName,
+                company: fileData.company,
+                buildings: fileData.buildings
+            });
+        });
+        
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `pdf-building-mapping-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        showStatus('매핑 정보를 내보냈습니다.', 'success');
+    }
+    
+    // Excel 데이터 내보내기 (공실없음 포함된 전체 데이터)
+    function exportExcelData() {
+        if (!excelData) {
+            showStatus('내보낼 Excel 데이터가 없습니다.', 'error');
+            return;
+        }
+        
+        // 현재 메모리의 excelData를 그대로 내보냄 (공실없음 포함)
+        const blob = new Blob([JSON.stringify(excelData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `excel_data_updated_${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        // 통계 정보 계산
+        let noVacancyCount = 0;
+        let inactiveCount = 0;
+        let duplicateCount = 0;
+        
+        if (excelData.vacancies) {
+            const originalLength = excelData.vacancies.length;
+            const uniqueVacancies = removeDuplicateVacancies(excelData.vacancies);
+            duplicateCount = originalLength - uniqueVacancies.length;
+            
+            excelData.vacancies.forEach(vacancy => {
+                if (vacancy.isNoVacancy) noVacancyCount++;
+                if (vacancy.status === 'inactive') inactiveCount++;
+            });
+        }
+        
+        showStatus(`Excel 데이터를 내보냈습니다. (공실없음: ${noVacancyCount}개, 비노출 공실: ${inactiveCount}개, 중복 제거: ${duplicateCount}개)`, 'success');
+    }
+    
+    // 상태 메시지 표시
+    function showStatus(message, type) {
+        const statusEl = document.getElementById('statusMessage');
+        statusEl.textContent = message;
+        statusEl.className = `status-message ${type}`;
+        statusEl.style.display = 'block';
+        
+        setTimeout(() => {
+            statusEl.style.display = 'none';
+        }, 3000);
+    }
+    </script>
+</body>
+</html>
