@@ -24,7 +24,7 @@
             background-color: #f5f5f5;
         }
         
-        /* 헤더 스타일 - 데스크톱 */
+        /* 헤더 스타일 */
         .pdf-header {
             background: #2c3e50;
             color: white;
@@ -33,7 +33,7 @@
             align-items: center;
             justify-content: space-between;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            min-height: 60px;
+            height: 60px;
         }
         
         .pdf-title {
@@ -42,39 +42,12 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            flex: 1;
-            min-width: 0;
-        }
-        
-        .pdf-title span {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
         }
         
         .pdf-controls {
             display: flex;
             align-items: center;
             gap: 15px;
-        }
-        
-        /* 닫기 버튼 */
-        .close-button {
-            background: rgba(255, 255, 255, 0.1);
-            border: none;
-            color: white;
-            width: 36px;
-            height: 36px;
-            border-radius: 4px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background 0.2s;
-        }
-        
-        .close-button:hover {
-            background: rgba(255, 255, 255, 0.2);
         }
         
         /* 검색 바 */
@@ -407,86 +380,8 @@
             gap: 5px;
         }
         
-        /* ===== 모바일 반응형 ===== */
+        /* 모바일 대응 */
         @media (max-width: 768px) {
-            /* 헤더를 수직 레이아웃으로 변경 */
-            .pdf-header {
-                flex-direction: column;
-                padding: 10px;
-                min-height: auto;
-                gap: 10px;
-            }
-            
-            /* 첫 번째 줄: 닫기, 제목, 페이지 네비게이션 */
-            .header-top-row {
-                display: flex;
-                align-items: center;
-                width: 100%;
-                gap: 10px;
-            }
-            
-            .pdf-title {
-                font-size: 14px;
-                flex: 1;
-                min-width: 0;
-            }
-            
-            .pdf-title button {
-                font-size: 20px;
-            }
-            
-            .pdf-title span {
-                font-size: 13px;
-            }
-            
-            /* 페이지 네비게이션 강조 */
-            .page-navigation {
-                padding: 4px 8px;
-                gap: 6px;
-            }
-            
-            .page-navigation .btn {
-                padding: 4px 8px;
-                font-size: 14px;
-            }
-            
-            .page-input {
-                width: 40px;
-                padding: 2px;
-                font-size: 13px;
-            }
-            
-            #totalPages {
-                font-size: 12px;
-            }
-            
-            /* 두 번째 줄: 검색 (필요시) */
-            .header-bottom-row {
-                display: flex;
-                width: 100%;
-                gap: 10px;
-            }
-            
-            .search-container {
-                flex: 1;
-                padding: 6px 10px;
-            }
-            
-            .search-input {
-                width: 100%;
-                font-size: 13px;
-            }
-            
-            .search-button {
-                padding: 4px 8px;
-            }
-            
-            /* 줌 컨트롤 숨김 */
-            .zoom-controls {
-                display: none;
-            }
-            
-            /* 사이드바 */
             .sidebar {
                 position: fixed;
                 z-index: 100;
@@ -494,64 +389,12 @@
                 box-shadow: 2px 0 4px rgba(0,0,0,0.1);
             }
             
-            /* 메인 컨테이너 높이 조정 */
-            .pdf-container {
-                height: calc(100vh - 100px); /* 헤더가 2줄이므로 높이 증가 */
-            }
-            
-            /* PDF 페이지 패딩 축소 */
-            .pdf-pages {
-                padding: 10px;
-            }
-            
-            /* 닫기 버튼 */
-            .close-button {
-                width: 32px;
-                height: 32px;
-                font-size: 18px;
-            }
-            
-            /* 자동 검색 표시 - 작게 */
-            .auto-search-indicator {
-                top: 5px;
-                right: 5px;
-                padding: 6px 12px;
-                font-size: 11px;
-            }
-            
-            /* Direct Mapping 표시 - 작게 */
-            .direct-mapping-indicator {
-                top: 5px;
-                left: 5px;
-                padding: 4px 10px;
-                font-size: 10px;
-            }
-            
-            /* 매칭 정보 - 작게 */
-            .match-info {
-                bottom: 5px;
-                right: 5px;
-                padding: 6px 12px;
-                font-size: 10px;
-            }
-        }
-        
-        /* 작은 모바일 (375px 이하) */
-        @media (max-width: 375px) {
-            .pdf-title span {
-                font-size: 12px;
-            }
-            
-            .page-input {
-                width: 35px;
-            }
-            
-            #totalPages {
-                font-size: 11px;
-            }
-            
             .search-input {
-                font-size: 12px;
+                width: 150px;
+            }
+            
+            .pdf-controls {
+                gap: 10px;
             }
         }
     </style>
@@ -559,17 +402,23 @@
 <body>
     <!-- 헤더 -->
     <div class="pdf-header">
-        <!-- 모바일: 첫 번째 줄 -->
-        <div class="header-top-row">
-            <button id="closeViewer" class="close-button" title="닫기">
-                <i class="bi bi-x-lg"></i>
+        <div class="pdf-title">
+            <button id="toggleSidebar" class="btn btn-sm btn-outline-light">
+                <i class="bi bi-list"></i>
             </button>
-            
-            <div class="pdf-title">
-                <button id="toggleSidebar" class="btn btn-sm btn-outline-light">
-                    <i class="bi bi-list"></i>
+            <span id="documentTitle">PDF 뷰어</span>
+        </div>
+        
+        <div class="pdf-controls">
+            <!-- 검색 -->
+            <div class="search-container">
+                <input type="text" 
+                       id="searchInput" 
+                       class="search-input" 
+                       placeholder="빌딩명 또는 주소 입력">
+                <button id="searchButton" class="search-button">
+                    <i class="bi bi-search"></i>
                 </button>
-                <span id="documentTitle">PDF 뷰어</span>
             </div>
             
             <!-- 페이지 네비게이션 -->
@@ -582,23 +431,9 @@
                        class="page-input" 
                        value="1" 
                        min="1">
-                <span id="totalPages">/ 1</span>
+                <span id="totalPages" style="color: rgba(255,255,255,0.8)">/ 1</span>
                 <button id="nextPage" class="btn btn-sm btn-outline-light">
                     <i class="bi bi-chevron-right"></i>
-                </button>
-            </div>
-        </div>
-        
-        <!-- 데스크톱용 컨트롤 -->
-        <div class="pdf-controls d-none d-md-flex">
-            <!-- 검색 -->
-            <div class="search-container">
-                <input type="text" 
-                       id="searchInput" 
-                       class="search-input" 
-                       placeholder="빌딩명 또는 주소 입력">
-                <button id="searchButton" class="search-button">
-                    <i class="bi bi-search"></i>
                 </button>
             </div>
             
@@ -615,19 +450,6 @@
                 </select>
                 <button id="zoomIn" class="btn btn-sm btn-outline-light">
                     <i class="bi bi-zoom-in"></i>
-                </button>
-            </div>
-        </div>
-        
-        <!-- 모바일: 두 번째 줄 (검색) -->
-        <div class="header-bottom-row d-md-none">
-            <div class="search-container">
-                <input type="text" 
-                       id="searchInputMobile" 
-                       class="search-input" 
-                       placeholder="빌딩명 검색">
-                <button id="searchButtonMobile" class="search-button">
-                    <i class="bi bi-search"></i>
                 </button>
             </div>
         </div>
@@ -804,21 +626,19 @@
             return null;
         }
         
-        // 텍스트 정규화 - 강화 버전
+        // 텍스트 정규화
         normalizeText(text) {
             return text
                 .toLowerCase()
-                .replace(/\s+/g, '')                  // 모든 공백 제거
-                .replace(/[()（）\[\]【】,，]/g, '')   // 괄호, 쉼표 제거
-                .replace(/&/g, '')                    // 앰퍼샌드 제거
-                .replace(/구\.?/g, '')                // "구", "구." 제거
+                .replace(/\s+/g, '')
+                .replace(/[()（）\[\]【】]/g, '')
                 .replace(/[.,;:!?]/g, '')
                 .replace(/building|tower|center|plaza|office|house|square/gi, '')
                 .replace(/빌딩|타워|센터|프라자|오피스|하우스|스퀘어/g, '');
         }
     }
     
-    // 기존의 ImprovedPDFSearch 클래스 (폴백용) - 생략하고 이전과 동일
+    // 기존의 ImprovedPDFSearch 클래스 (폴백용)
     class ImprovedPDFSearch {
         constructor(pdfDoc) {
             this.pdfDoc = pdfDoc;
@@ -835,6 +655,7 @@
         
         async searchBuilding(searchText, areaInfo = {}) {
             console.log(`빌딩 검색 시작: "${searchText}"`, areaInfo);
+            
             const results = [];
             
             for (let i = 1; i <= this.pdfDoc.numPages; i++) {
@@ -1265,6 +1086,26 @@
             // 회사명 추출
             this.companyName = params.get('source') || this.extractCompanyFromFileName(this.fileName);
             
+            // 메서드 바인딩 (권장 해결책 - 방법 1)
+            this.showLoading = this.showLoading.bind(this);
+            this.showError = this.showError.bind(this);
+            this.loadPDF = this.loadPDF.bind(this);
+            this.renderPage = this.renderPage.bind(this);
+            this.goToPage = this.goToPage.bind(this);
+            this.previousPage = this.previousPage.bind(this);
+            this.nextPage = this.nextPage.bind(this);
+            this.zoomIn = this.zoomIn.bind(this);
+            this.zoomOut = this.zoomOut.bind(this);
+            this.performSearch = this.performSearch.bind(this);
+            this.comprehensiveSearch = this.comprehensiveSearch.bind(this);
+            this.updateActivePageItem = this.updateActivePageItem.bind(this);
+            this.showMatchInfo = this.showMatchInfo.bind(this);
+            this.log = this.log.bind(this);
+            this.toggleDebug = this.toggleDebug.bind(this);
+            this.generatePageList = this.generatePageList.bind(this);
+            this.loadPageInfo = this.loadPageInfo.bind(this);
+            this.extractKeyInfo = this.extractKeyInfo.bind(this);
+            
             this.log('초기화 파라미터:', {
                 file: this.fileName,
                 company: this.companyName,
@@ -1309,7 +1150,6 @@
                     await this.renderPage(1);
                     if (this.searchText) {
                         document.getElementById('searchInput').value = this.searchText;
-                        document.getElementById('searchInputMobile').value = this.searchText;
                     }
                 }
             } else {
@@ -1318,25 +1158,10 @@
         }
         
         setupEventListeners() {
-            // 닫기 버튼
-            document.getElementById('closeViewer').addEventListener('click', () => {
-                window.close();
-                // window.close()가 작동하지 않으면 이전 페이지로
-                setTimeout(() => {
-                    if (window.history.length > 1) {
-                        window.history.back();
-                    } else {
-                        window.location.href = '/';
-                    }
-                }, 100);
-            });
-            
-            // 사이드바 토글
             document.getElementById('toggleSidebar').addEventListener('click', () => {
                 document.getElementById('sidebar').classList.toggle('hidden');
             });
             
-            // 검색 버튼 - 데스크톱
             document.getElementById('searchButton').addEventListener('click', () => {
                 if (!this.isAutoSearching) this.performSearch();
             });
@@ -1345,16 +1170,6 @@
                 if (e.key === 'Enter' && !this.isAutoSearching) this.performSearch();
             });
             
-            // 검색 버튼 - 모바일
-            document.getElementById('searchButtonMobile').addEventListener('click', () => {
-                if (!this.isAutoSearching) this.performSearchMobile();
-            });
-            
-            document.getElementById('searchInputMobile').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter' && !this.isAutoSearching) this.performSearchMobile();
-            });
-            
-            // 페이지 네비게이션
             document.getElementById('prevPage').addEventListener('click', () => this.previousPage());
             document.getElementById('nextPage').addEventListener('click', () => this.nextPage());
             document.getElementById('pageNum').addEventListener('change', (e) => {
@@ -1364,7 +1179,6 @@
                 }
             });
             
-            // 줌 컨트롤
             document.getElementById('zoomIn').addEventListener('click', () => this.zoomIn());
             document.getElementById('zoomOut').addEventListener('click', () => this.zoomOut());
             document.getElementById('zoomSelect').addEventListener('change', (e) => {
@@ -1383,7 +1197,10 @@
         
         async loadPDF(fileName) {
             try {
-                this.showLoading(true);
+                // 안전장치 추가 (권장 해결책 - 방법 3)
+                if (typeof this.showLoading === 'function') {
+                    this.showLoading(true);
+                }
                 
                 const url = `./pdfs/${fileName}`;
                 this.log('PDF 로드:', url);
@@ -1397,11 +1214,15 @@
                 
                 this.generatePageList();
                 
-                this.showLoading(false);
+                if (typeof this.showLoading === 'function') {
+                    this.showLoading(false);
+                }
                 
             } catch (error) {
                 console.error('PDF 로드 실패:', error);
-                this.showError(`PDF 로드 실패: ${error.message}`);
+                if (typeof this.showError === 'function') {
+                    this.showError(`PDF 로드 실패: ${error.message}`);
+                }
             }
         }
         
@@ -1631,7 +1452,9 @@
             
             this.log('수동 검색 시작:', searchText);
             
-            this.showLoading(true);
+            if (typeof this.showLoading === 'function') {
+                this.showLoading(true);
+            }
             
             // Direct Mapping 먼저 시도
             if (this.mappingManager.loaded) {
@@ -1642,7 +1465,9 @@
                 );
                 
                 if (pageNumber) {
-                    this.showLoading(false);
+                    if (typeof this.showLoading === 'function') {
+                        this.showLoading(false);
+                    }
                     this.log(`Direct Mapping 결과: ${searchText} → ${pageNumber}페이지`);
                     this.showMatchInfo(`Direct Mapping: ${searchText}`, { pageNum: pageNumber });
                     
@@ -1664,7 +1489,9 @@
                 rent: this.rentArea
             });
             
-            this.showLoading(false);
+            if (typeof this.showLoading === 'function') {
+                this.showLoading(false);
+            }
             
             if (result && result.score > 30) {
                 this.log(`수동 검색 결과: ${result.match ? result.match.name : searchText} (${result.pageNum}페이지)`);
@@ -1674,12 +1501,6 @@
             } else {
                 alert(`"${searchText}"과(와) 관련된 페이지를 찾을 수 없습니다.`);
             }
-        }
-        
-        async performSearchMobile() {
-            const searchText = document.getElementById('searchInputMobile').value.trim();
-            document.getElementById('searchInput').value = searchText;
-            await this.performSearch();
         }
         
         async renderPage(pageNumber) {
