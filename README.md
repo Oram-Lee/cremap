@@ -4,7 +4,6 @@ Firebase Realtime Database와 연동된 임대안내문 검색 시스템입니�
 
 ## 🔥 Firebase 연동 정보
 
-- **Database URL**: `https://cre-unified-default-rtdb.asia-southeast1.firebasedatabase.app`
 - **사용 컬렉션**: 
   - `vacancies`: 공실 정보
   - `buildings`: 빌딩 정보
@@ -113,6 +112,3 @@ const firebaseConfig = {
   - 정적 data.js → Firebase Realtime Database 연동
   - 실시간 데이터 검색 지원
 
-## 🔗 관련 프로젝트
-
-- CRE Portal v6: https://cre-unified-default-rtdb.asia-southeast1.firebasedatabase.app
