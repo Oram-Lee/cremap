@@ -1,26 +1,44 @@
-// 검색 관리자
-const SearchManager = {
-    currentPage: 1,
-    pageSize: 20,
-    duplicateStats: { // 중복 제거 통계 추가
-        performSearch: { before: 0, after: 0, removed: 0 },
-        displayResults: { before: 0, after: 0, removed: 0 }
-    },
-    
-    // 초기화
-    init() {
-        // 이벤트 리스너 설정
-        this.setupEventListeners();
+// Search Controller for Leasing Search App
+// Firebase 연동 검색 및 UI 제어
+
+class LeasingSearchApp {
+    constructor() {
+        this.currentResults = [];
+        this.selectedItems = new Map();
+        this.currentPage = 1;
+        this.pageSize = 20;
+        this.isLoading = false;
         
-        // 자동완성 설정
-        this.setupAutoComplete();
-    },
+        this.init();
+    }
     
-    // 이벤트 리스너 설정
-    setupEventListeners() {
+    async init() {
+        console.log('🚀 Initializing Leasing Search App...');
+        
+        this.bindEvents();
+        this.setupAutocomplete();
+        
+        // 초기 데이터 로드 및 마지막 업데이트 시간 표시
+        try {
+            this.showLoading('데이터를 초기화하는 중...');
+            await FirebaseService.loadMergedData();
+            
+            const lastUpdate = await FirebaseService.getLastUpdateTime();
+            document.getElementById('lastUpdated').textContent = `최신 자료: ${lastUpdate}`;
+            
+            this.hideLoading();
+            console.log('✅ App initialized successfully');
+        } catch (error) {
+            console.error('❌ Initialization error:', error);
+            this.hideLoading();
+            this.showError('데이터 로드 중 오류가 발생했습니다.');
+        }
+    }
+    
+    bindEvents() {
         // 검색 유형 변경
         document.getElementById('searchType').addEventListener('change', (e) => {
-            this.switchSearchType(e.target.value);
+            this.onSearchTypeChange(e.target.value);
         });
         
         // 검색 버튼
@@ -33,504 +51,344 @@ const SearchManager = {
             this.resetSearch();
         });
         
+        // 전체 보기 버튼
+        document.getElementById('loadAllBtn').addEventListener('click', () => {
+            this.loadAll();
+        });
+        
         // 페이지 크기 변경
         document.getElementById('pageSize').addEventListener('change', (e) => {
             this.pageSize = parseInt(e.target.value);
-            this.displayResults();
+            this.currentPage = 1;
+            this.renderResults();
         });
         
-        // 선택된 빌딩 지도보기
+        // Enter 키로 검색
+        ['buildingName', 'districtName', 'stationName'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.performSearch();
+                    }
+                });
+            }
+        });
+        
+        // 선택 빌딩 지도보기
         document.getElementById('showSelectedMap').addEventListener('click', () => {
-            MapManager.showSelectedBuildingsMap();
+            this.showSelectedOnMap();
         });
-        
-        // Enter 키 검색은 setupAutoCompleteInput에서 처리
-    },
+    }
     
-    // 검색 유형 전환
-    switchSearchType(type) {
+    onSearchTypeChange(type) {
         // 모든 검색 입력 숨기기
         document.querySelectorAll('.search-input').forEach(el => {
             el.classList.add('d-none');
         });
         
-        // 선택된 유형 표시
-        switch(type) {
-            case 'building':
-                document.getElementById('buildingSearch').classList.remove('d-none');
-                break;
-            case 'district':
-                document.getElementById('districtSearch').classList.remove('d-none');
-                break;
-            case 'station':
-                document.getElementById('stationSearch').classList.remove('d-none');
-                break;
-            case 'area':
-                document.getElementById('areaSearch').classList.remove('d-none');
-                break;
-            case 'complex':
-                // 복합검색은 모든 입력 표시
-                document.getElementById('buildingSearch').classList.remove('d-none');
-                document.getElementById('districtSearch').classList.remove('d-none');
-                document.getElementById('stationSearch').classList.remove('d-none');
-                document.getElementById('areaSearch').classList.remove('d-none');
-                document.getElementById('complexSearch').classList.remove('d-none');
-                break;
+        // 선택된 유형만 표시
+        const searchIds = {
+            'building': 'buildingSearch',
+            'district': 'districtSearch',
+            'station': 'stationSearch',
+            'area': 'areaSearch',
+            'complex': 'complexSearch'
+        };
+        
+        const targetId = searchIds[type];
+        if (targetId) {
+            document.getElementById(targetId).classList.remove('d-none');
         }
-    },
+        
+        // 복합검색일 경우 모든 필드 표시
+        if (type === 'complex') {
+            ['buildingSearch', 'districtSearch', 'stationSearch', 'areaSearch'].forEach(id => {
+                document.getElementById(id).classList.remove('d-none');
+            });
+        }
+    }
     
-    // 자동완성 설정
-    setupAutoComplete() {
+    setupAutocomplete() {
         // 빌딩명 자동완성
-        this.setupAutoCompleteInput('buildingName', 'buildingSuggestions', 'buildings');
+        this.setupAutocompleteField('buildingName', 'buildingSuggestions', async (query) => {
+            const suggestions = await FirebaseService.getBuildingNameSuggestions(query);
+            return suggestions.map(s => ({
+                text: s.name,
+                subtext: s.address,
+                value: s.name
+            }));
+        });
         
         // 지역명 자동완성
-        this.setupAutoCompleteInput('districtName', 'districtSuggestions', 'districts', 'dongs');
+        this.setupAutocompleteField('districtName', 'districtSuggestions', async (query) => {
+            const suggestions = await FirebaseService.getDistrictSuggestions(query);
+            return suggestions.map(s => ({
+                text: s,
+                value: s
+            }));
+        });
         
         // 역명 자동완성
-        this.setupAutoCompleteInput('stationName', 'stationSuggestions', 'stations');
-    },
+        this.setupAutocompleteField('stationName', 'stationSuggestions', async (query) => {
+            const suggestions = await FirebaseService.getStationSuggestions(query);
+            return suggestions.map(s => ({
+                text: s,
+                value: s
+            }));
+        });
+    }
     
-    // 개별 자동완성 설정
-    setupAutoCompleteInput(inputId, suggestionsId, ...cacheKeys) {
+    setupAutocompleteField(inputId, suggestionsId, fetchFn) {
         const input = document.getElementById(inputId);
         const suggestions = document.getElementById(suggestionsId);
-        let currentFocus = -1;
         
-        input.addEventListener('input', (e) => {
-            const value = e.target.value.toLowerCase();
-            if (value.length < 1) {
+        if (!input || !suggestions) return;
+        
+        let debounceTimer = null;
+        
+        input.addEventListener('input', async (e) => {
+            const query = e.target.value.trim();
+            
+            if (debounceTimer) clearTimeout(debounceTimer);
+            
+            if (query.length < 1) {
                 suggestions.classList.remove('show');
                 return;
             }
             
-            // 데이터 결합
-            let allItems = [];
-            cacheKeys.forEach(key => {
-                if (DataManager.cache && DataManager.cache[key]) {
-                    allItems = allItems.concat(DataManager.cache[key]);
+            debounceTimer = setTimeout(async () => {
+                try {
+                    const items = await fetchFn(query);
+                    this.renderSuggestions(suggestions, items, input);
+                } catch (error) {
+                    console.error('Autocomplete error:', error);
                 }
-            });
-            
-            // 필터링
-            const filtered = allItems.filter(item => 
-                item.toLowerCase().includes(value)
-            ).slice(0, 20); // 최대 20개
-            
-            // 표시
-            if (filtered.length > 0) {
-                suggestions.innerHTML = filtered.map((item, index) => 
-                    `<div class="suggestion-item" data-index="${index}" data-value="${item}">${item}</div>`
-                ).join('');
-                suggestions.classList.add('show');
-                currentFocus = -1;
-            } else {
-                suggestions.classList.remove('show');
-            }
+            }, 200);
         });
         
-        // 항목 클릭
-        suggestions.addEventListener('click', (e) => {
-            if (e.target.classList.contains('suggestion-item')) {
-                input.value = e.target.dataset.value;
-                suggestions.classList.remove('show');
-            }
-        });
-        
-        // 키보드 네비게이션
-        input.addEventListener('keydown', (e) => {
-            const items = suggestions.querySelectorAll('.suggestion-item');
-            
-            if (e.key === 'ArrowDown') {
-                currentFocus++;
-                addActive(items);
-                e.preventDefault();
-            } else if (e.key === 'ArrowUp') {
-                currentFocus--;
-                addActive(items);
-                e.preventDefault();
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                if (currentFocus > -1 && items[currentFocus]) {
-                    // 자동완성 항목이 선택된 경우
-                    items[currentFocus].click();
-                } else {
-                    // 선택된 항목이 없으면 바로 검색 실행
-                    suggestions.classList.remove('show');
-                    this.performSearch();
-                }
-            } else if (e.key === 'Escape') {
-                suggestions.classList.remove('show');
-            }
-        });
-        
-        function addActive(items) {
-            removeActive(items);
-            if (currentFocus >= items.length) currentFocus = 0;
-            if (currentFocus < 0) currentFocus = items.length - 1;
-            if (items[currentFocus]) {
-                items[currentFocus].classList.add('active');
-            }
-        }
-        
-        function removeActive(items) {
-            items.forEach(item => item.classList.remove('active'));
-        }
-        
-        // 포커스 아웃시 숨기기 (약간의 지연)
         input.addEventListener('blur', () => {
-            setTimeout(() => suggestions.classList.remove('show'), 200);
+            setTimeout(() => {
+                suggestions.classList.remove('show');
+            }, 200);
         });
-    },
+    }
     
-    // ⭐ 비활성 빌딩 필터링 메서드 추가
-    filterInactiveBuildings(results) {
-        console.group('🚫 비활성 빌딩 필터링');
-        const beforeCount = results.length;
-        
-        // status가 'inactive'인 빌딩 제외
-        const activeResults = results.filter(building => {
-            if (building.status === 'inactive') {
-                console.log(`비활성 빌딩 제외: ${building.빌딩명} (${building.출처회사})`);
-                return false;
-            }
-            return true;
-        });
-        
-        const removedCount = beforeCount - activeResults.length;
-        console.log(`✅ 필터링 완료: ${beforeCount}개 → ${activeResults.length}개 (${removedCount}개 비활성)`);
-        console.groupEnd();
-        
-        return activeResults;
-    },
-    
-    // ⭐ 중복 제거 메서드
-    removeDuplicates(results, context = 'unknown') {
-        console.group(`🔍 중복 제거 [${context}]`);
-        console.log(`원본 결과 수: ${results.length}`);
-        
-        const uniqueMap = new Map();
-        const duplicateDetails = [];
-        
-        results.forEach((item, index) => {
-            // 빌딩명 정규화 (보이지 않는 문자 제거)
-            const cleanedName = item.빌딩명 ? 
-                item.빌딩명.replace(/[\u200B-\u200D\uFEFF\u202C]/g, '').trim() : '';
-            
-            // 유니크 키 생성: 빌딩명 + 공실층 + 출처회사
-            const source = item.출처회사 || item.출처 || '';
-            const uniqueKey = `${cleanedName}_${item.공실층}_${source}`;
-            
-            if (uniqueMap.has(uniqueKey)) {
-                const existing = uniqueMap.get(uniqueKey);
-                duplicateDetails.push({
-                    index: index,
-                    빌딩명: cleanedName,
-                    공실층: item.공실층,
-                    출처: source,
-                    key: uniqueKey
-                });
-                
-                // 더 완전한 데이터로 업데이트 (필드가 많이 채워진 것)
-                const existingFieldCount = Object.values(existing)
-                    .filter(v => v && v !== '-' && v !== '').length;
-                const newFieldCount = Object.values(item)
-                    .filter(v => v && v !== '-' && v !== '').length;
-                
-                console.log(`  중복 비교: 기존(${existingFieldCount}필드) vs 신규(${newFieldCount}필드)`);
-                
-                if (newFieldCount > existingFieldCount) {
-                    uniqueMap.set(uniqueKey, item);
-                    console.log(`  → 더 완전한 데이터로 교체`);
-                }
-            } else {
-                uniqueMap.set(uniqueKey, item);
-            }
-        });
-        
-        const uniqueResults = Array.from(uniqueMap.values());
-        const removedCount = results.length - uniqueResults.length;
-        
-        // 통계 업데이트
-        if (context === 'performSearch') {
-            this.duplicateStats.performSearch = {
-                before: results.length,
-                after: uniqueResults.length,
-                removed: removedCount
-            };
-        } else if (context === 'displayResults') {
-            this.duplicateStats.displayResults = {
-                before: results.length,
-                after: uniqueResults.length,
-                removed: removedCount
-            };
+    renderSuggestions(container, items, input) {
+        if (!items || items.length === 0) {
+            container.classList.remove('show');
+            return;
         }
         
-        if (duplicateDetails.length > 0) {
-            console.log(`⚠️ 중복 발견: ${duplicateDetails.length}개`);
-            console.table(duplicateDetails.slice(0, 10)); // 처음 10개만 표시
-        }
+        container.innerHTML = items.map(item => `
+            <div class="suggestion-item" data-value="${item.value}">
+                <div>${item.text}</div>
+                ${item.subtext ? `<small class="text-muted">${item.subtext}</small>` : ''}
+            </div>
+        `).join('');
         
-        console.log(`✅ 중복 제거 완료: ${results.length}개 → ${uniqueResults.length}개 (${removedCount}개 제거)`);
-        console.groupEnd();
+        container.querySelectorAll('.suggestion-item').forEach(el => {
+            el.addEventListener('click', () => {
+                input.value = el.dataset.value;
+                container.classList.remove('show');
+            });
+        });
         
-        return uniqueResults;
-    },
+        container.classList.add('show');
+    }
     
-    // 검색 실행 - 비활성 필터링 추가
-    performSearch() {
+    async performSearch() {
         const searchType = document.getElementById('searchType').value;
-        const criteria = {};
+        
+        const options = {};
         
         // 검색 조건 수집
-        if (searchType === 'complex' || searchType === 'building') {
-            criteria.buildingName = document.getElementById('buildingName').value;
+        if (searchType === 'building' || searchType === 'complex') {
+            options.buildingName = document.getElementById('buildingName').value.trim();
         }
         
-        if (searchType === 'complex' || searchType === 'district') {
-            criteria.district = document.getElementById('districtName').value;
+        if (searchType === 'district' || searchType === 'complex') {
+            options.district = document.getElementById('districtName').value.trim();
         }
         
-        if (searchType === 'complex' || searchType === 'station') {
-            criteria.station = document.getElementById('stationName').value;
-            criteria.walkingTime = document.getElementById('walkingTime').value;
+        if (searchType === 'station' || searchType === 'complex') {
+            options.station = document.getElementById('stationName').value.trim();
+            options.walkingTime = parseInt(document.getElementById('walkingTime').value) || 0;
         }
         
-        if (searchType === 'complex' || searchType === 'area') {
-            criteria.vacancyAreaFrom = document.getElementById('vacancyAreaFrom').value;
-            criteria.vacancyAreaTo = document.getElementById('vacancyAreaTo').value;
+        if (searchType === 'area' || searchType === 'complex') {
+            options.areaFrom = parseFloat(document.getElementById('vacancyAreaFrom').value) || 0;
+            options.areaTo = parseFloat(document.getElementById('vacancyAreaTo').value) || 0;
         }
         
-        // 검색 실행
-        const rawResults = DataManager.search(criteria);
+        // 검색 조건 유효성 검사
+        const hasCondition = Object.values(options).some(v => v);
+        if (!hasCondition) {
+            alert('검색 조건을 입력해주세요.');
+            return;
+        }
         
-        // ⭐ 1. 비활성 빌딩 필터링 (가장 먼저!)
-        const activeResults = this.filterInactiveBuildings(rawResults);
+        try {
+            this.showLoading('검색 중...');
+            this.currentResults = await FirebaseService.searchVacancies(options);
+            this.currentPage = 1;
+            this.renderResults();
+            this.hideLoading();
+        } catch (error) {
+            console.error('Search error:', error);
+            this.hideLoading();
+            this.showError('검색 중 오류가 발생했습니다.');
+        }
+    }
+    
+    async loadAll() {
+        try {
+            this.showLoading('전체 데이터 로드 중...');
+            this.currentResults = await FirebaseService.loadMergedData();
+            this.currentPage = 1;
+            this.renderResults();
+            this.hideLoading();
+        } catch (error) {
+            console.error('Load all error:', error);
+            this.hideLoading();
+            this.showError('데이터 로드 중 오류가 발생했습니다.');
+        }
+    }
+    
+    resetSearch() {
+        // 입력 필드 초기화
+        ['buildingName', 'districtName', 'stationName', 'walkingTime', 'vacancyAreaFrom', 'vacancyAreaTo'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
         
-        // ⭐ 2. 중복 제거
-        const uniqueResults = this.removeDuplicates(activeResults, 'performSearch');
+        // 검색 유형 초기화
+        document.getElementById('searchType').value = 'building';
+        this.onSearchTypeChange('building');
         
-        // 중복 제거된 결과를 저장
-        DataManager.currentResults = uniqueResults;
-        
-        // 결과 표시
+        // 결과 초기화
+        this.currentResults = [];
         this.currentPage = 1;
-        this.displayResults();
-        
-        // 전체 통계 표시
-        console.log('📊 전체 처리 통계:', {
-            원본: rawResults.length,
-            비활성제외: activeResults.length,
-            중복제거: uniqueResults.length,
-            중복통계: this.duplicateStats
-        });
-        
-        // 검색 완료 이벤트 발생
-        document.dispatchEvent(new CustomEvent('searchComplete'));
-    },
+        this.renderResults();
+    }
     
-    // 검색 결과의 빈 필드를 채우는 함수
-    fillEmptyFields(results) {
-        // 빌딩명별로 완전한 정보를 저장할 객체
-        const buildingInfo = {};
-        
-        console.log('fillEmptyFields 시작, 전체 결과 수:', results.length);
-        
-        // 1단계: 각 빌딩의 완전한 정보 수집
-        results.forEach(result => {
-            // 빌딩명 정규화 - 보이지 않는 문자 제거
-            const cleanedName = result.빌딩명 ? result.빌딩명.replace(/[\u200B-\u200D\uFEFF\u202C]/g, '').trim() : '';
-            const key = cleanedName;
-            
-            if (!key) return;
-            
-            if (!buildingInfo[key]) {
-                buildingInfo[key] = {
-                    빌딩명: cleanedName,
-                    주소: null,
-                    인근역: null,
-                    출처회사: result.출처회사 || result.출처
-                };
-            }
-            
-            // 정보가 있으면 업데이트 (빈 문자열도 체크)
-            if (result.주소 && result.주소.trim()) {
-                // 더 긴 주소로 업데이트 (더 상세한 정보일 가능성)
-                if (!buildingInfo[key].주소 || result.주소.length > buildingInfo[key].주소.length) {
-                    buildingInfo[key].주소 = result.주소;
-                }
-            }
-            if (result.인근역 && result.인근역.trim()) {
-                // 더 긴 인근역 정보로 업데이트 (더 상세한 정보일 가능성)
-                if (!buildingInfo[key].인근역 || result.인근역.length > buildingInfo[key].인근역.length) {
-                    buildingInfo[key].인근역 = result.인근역;
-                }
-            }
-            // 출처회사도 업데이트
-            if (!buildingInfo[key].출처회사 && (result.출처회사 || result.출처)) {
-                buildingInfo[key].출처회사 = result.출처회사 || result.출처;
-            }
-        });
-        
-        console.log('수집된 빌딩 정보:', Object.keys(buildingInfo).length);
-        
-        // 빌딩 정보 샘플 출력
-        const sampleKeys = Object.keys(buildingInfo).slice(0, 3);
-        sampleKeys.forEach(key => {
-            console.log(`빌딩 정보 [${key}]:`, buildingInfo[key]);
-        });
-        
-        // 2단계: 각 결과에 빈 필드 채우기
-        const filledResults = results.map((result, index) => {
-            // 빌딩명 정규화
-            const cleanedName = result.빌딩명 ? result.빌딩명.replace(/[\u200B-\u200D\uFEFF\u202C]/g, '').trim() : '';
-            const info = buildingInfo[cleanedName] || {};
-            
-            // 디버깅을 위한 로그 (처음 5개만)
-            if (index < 5) {
-                console.log(`결과 ${index}:`, {
-                    원본빌딩명: result.빌딩명,
-                    정규화빌딩명: cleanedName,
-                    원본: result,
-                    보충정보: info
-                });
-            }
-            
-            // 모든 필드를 명시적으로 처리
-            const filled = {
-                ...result,
-                빌딩명: cleanedName || '-',
-                주소: result.주소 && result.주소.trim() ? result.주소 : (info.주소 || '-'),
-                인근역: result.인근역 && result.인근역.trim() ? result.인근역 : (info.인근역 || '-'),
-                공실층: result.공실층 || '-',
-                '공실전용면적(평)': result['공실전용면적(평)'] || result.공실전용면적 || '-',
-                '공실임대면적(평)': result['공실임대면적(평)'] || result.공실임대면적 || '-',
-                출처회사: result.출처회사 || result.출처 || info.출처회사 || '-'
-            };
-            
-            // 채워진 후 확인
-            if (index < 5) {
-                console.log(`채워진 결과 ${index}:`, {
-                    주소: filled.주소,
-                    인근역: filled.인근역
-                });
-            }
-            
-            return filled;
-        });
-        
-        return filledResults;
-    },
-    
-    // 검색 결과 표시 - 추가 필터링
-    displayResults() {
-        const results = DataManager.currentResults;
+    renderResults() {
         const tbody = document.getElementById('resultsBody');
-        const resultCount = document.getElementById('resultCount');
+        const countBadge = document.getElementById('resultCount');
         
-        // ⭐ 다시 한번 비활성 필터링 (안전장치)
-        const activeResults = this.filterInactiveBuildings(results);
+        countBadge.textContent = this.currentResults.length;
         
-        // ⭐ 2차 중복 제거
-        const uniqueResults = this.removeDuplicates(activeResults, 'displayResults');
-        
-        // 빈 필드 채우기
-        const filledResults = this.fillEmptyFields(uniqueResults);
-        
-        // 결과 수 표시
-        resultCount.textContent = filledResults.length;
-        
-        if (filledResults.length === 0) {
+        if (this.currentResults.length === 0) {
             tbody.innerHTML = `
                 <tr>
                     <td colspan="9" class="text-center text-muted py-5">
+                        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
                         검색 결과가 없습니다.
                     </td>
                 </tr>
             `;
-            this.updatePagination(0);
+            document.getElementById('pagination').innerHTML = '';
             return;
         }
         
         // 페이지네이션 계산
-        const startIndex = (this.currentPage - 1) * this.pageSize;
-        const endIndex = Math.min(startIndex + this.pageSize, filledResults.length);
-        const pageResults = filledResults.slice(startIndex, endIndex);
+        const startIdx = (this.currentPage - 1) * this.pageSize;
+        const endIdx = Math.min(startIdx + this.pageSize, this.currentResults.length);
+        const pageItems = this.currentResults.slice(startIdx, endIdx);
         
-        // 테이블 생성 - async 처리 필요
-        this.renderTableRows(pageResults, startIndex, tbody);
+        // 테이블 렌더링
+        tbody.innerHTML = pageItems.map(item => `
+            <tr data-id="${item.id}">
+                <td>
+                    <input type="checkbox" class="form-check-input item-checkbox" 
+                           data-id="${item.id}" ${this.selectedItems.has(item.id) ? 'checked' : ''}>
+                </td>
+                <td>
+                    <strong>${this.escapeHtml(item.buildingName)}</strong>
+                </td>
+                <td>${this.escapeHtml(item.address) || '-'}</td>
+                <td>${this.escapeHtml(item.nearbyStation) || '-'}</td>
+                <td><span class="badge bg-secondary">${this.escapeHtml(item.floor)}</span></td>
+                <td>${item.exclusiveArea ? item.exclusiveArea.toFixed(2) : '-'}</td>
+                <td>${item.rentArea ? item.rentArea.toFixed(2) : '-'}</td>
+                <td>
+                    <span class="source-badge ${this.escapeHtml(item.source)}">${this.escapeHtml(item.source)}</span>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary view-image-btn" 
+                            data-image="${this.escapeHtml(item.pageImageUrl)}"
+                            data-title="${this.escapeHtml(item.buildingName)} - ${this.escapeHtml(item.floor)}"
+                            data-info="출처: ${this.escapeHtml(item.source)} | 발행: ${this.escapeHtml(item.publishDate)}">
+                        <i class="bi bi-image"></i> 보기
+                    </button>
+                    ${item.coordinates ? `
+                        <button class="btn btn-sm btn-outline-success view-map-btn"
+                                data-lat="${item.coordinates.lat}"
+                                data-lng="${item.coordinates.lng}"
+                                data-name="${this.escapeHtml(item.buildingName)}">
+                            <i class="bi bi-geo-alt"></i>
+                        </button>
+                    ` : ''}
+                </td>
+            </tr>
+        `).join('');
         
-        this.updatePagination(filledResults.length);
-    },
+        // 이벤트 바인딩
+        this.bindResultEvents();
+        
+        // 페이지네이션 렌더링
+        this.renderPagination();
+    }
     
-    // 비동기 렌더링 메서드
-    async renderTableRows(pageResults, startIndex, tbody) {
-        const rows = [];
+    bindResultEvents() {
+        // 체크박스 이벤트
+        document.querySelectorAll('.item-checkbox').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                const id = e.target.dataset.id;
+                const item = this.currentResults.find(r => r.id === id);
+                
+                if (e.target.checked && item) {
+                    this.selectedItems.set(id, item);
+                } else {
+                    this.selectedItems.delete(id);
+                }
+                
+                this.updateSelectedSection();
+            });
+        });
         
-        console.log('renderTableRows 시작, 페이지 결과 수:', pageResults.length);
+        // 이미지 보기 버튼
+        document.querySelectorAll('.view-image-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const imageUrl = btn.dataset.image;
+                const title = btn.dataset.title;
+                const info = btn.dataset.info;
+                
+                if (imageUrl) {
+                    this.showImageViewer(imageUrl, title, info);
+                } else {
+                    alert('이미지 URL이 없습니다.');
+                }
+            });
+        });
         
-        for (let i = 0; i < pageResults.length; i++) {
-            const item = pageResults[i];
-            const index = startIndex + i;
-            const buildingKey = `${item.빌딩명}_${item.주소}`;
-            const isSelected = DataManager.selectedBuildings.has(buildingKey);
-            
-            // 첫 번째 항목 디버깅
-            if (i === 0) {
-                console.log('첫 번째 항목 상세:', item);
-            }
-            
-            // PDF 존재 여부 확인 (PDFSearchManager 사용)
-            let hasPdf = false;
-            if (window.PDFSearchManager) {
-                hasPdf = await window.PDFSearchManager.hasPDF(item);
-            }
-            
-            rows.push(`
-                <tr>
-                    <td>
-                        <input type="checkbox" class="form-check-input" 
-                               data-building-key="${buildingKey}"
-                               data-index="${index}"
-                               ${isSelected ? 'checked' : ''}
-                               onchange="SearchManager.toggleSelection(this)">
-                    </td>
-                    <td>${item.빌딩명 || '-'}</td>
-                    <td>${item.주소 || '-'}</td>
-                    <td>${item.인근역 || '-'}</td>
-                    <td>${item.공실층 || '-'}</td>
-                    <td>${item['공실전용면적(평)'] || '-'}</td>
-                    <td>${item['공실임대면적(평)'] || '-'}</td>
-                    <td>${item.출처회사 || '-'}</td>
-                    <td class="action-buttons">
-                        <div class="btn-group btn-group-sm">
-                            ${hasPdf ? `
-                                <button class="btn btn-outline-primary" 
-                                        onclick="SearchManager.showDetail(${index})">
-                                    <i class="bi bi-file-pdf"></i> PDF
-                                </button>
-                            ` : `
-                                <button class="btn btn-outline-secondary" disabled>
-                                    <i class="bi bi-file-pdf"></i> PDF
-                                </button>
-                            `}
-                            <button class="btn btn-outline-success" 
-                                    onclick="MapManager.showBuildingMap(${index})">
-                                <i class="bi bi-map"></i> 지도
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-            `);
-        }
-        
-        tbody.innerHTML = rows.join('');
-    },
+        // 지도 보기 버튼
+        document.querySelectorAll('.view-map-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const lat = parseFloat(btn.dataset.lat);
+                const lng = parseFloat(btn.dataset.lng);
+                const name = btn.dataset.name;
+                
+                if (lat && lng) {
+                    this.showSingleMarkerMap(lat, lng, name);
+                }
+            });
+        });
+    }
     
-    // 페이지네이션 업데이트
-    updatePagination(totalResults) {
+    renderPagination() {
+        const totalPages = Math.ceil(this.currentResults.length / this.pageSize);
         const pagination = document.getElementById('pagination');
-        const totalPages = Math.ceil(totalResults / this.pageSize);
         
         if (totalPages <= 1) {
             pagination.innerHTML = '';
@@ -542,18 +400,18 @@ const SearchManager = {
         // 이전 버튼
         html += `
             <li class="page-item ${this.currentPage === 1 ? 'disabled' : ''}">
-                <a class="page-link" href="#" onclick="SearchManager.goToPage(${this.currentPage - 1})">이전</a>
+                <a class="page-link" href="#" data-page="${this.currentPage - 1}">이전</a>
             </li>
         `;
         
         // 페이지 번호
         const startPage = Math.max(1, this.currentPage - 2);
-        const endPage = Math.min(totalPages, startPage + 4);
+        const endPage = Math.min(totalPages, this.currentPage + 2);
         
         for (let i = startPage; i <= endPage; i++) {
             html += `
                 <li class="page-item ${i === this.currentPage ? 'active' : ''}">
-                    <a class="page-link" href="#" onclick="SearchManager.goToPage(${i})">${i}</a>
+                    <a class="page-link" href="#" data-page="${i}">${i}</a>
                 </li>
             `;
         }
@@ -561,156 +419,131 @@ const SearchManager = {
         // 다음 버튼
         html += `
             <li class="page-item ${this.currentPage === totalPages ? 'disabled' : ''}">
-                <a class="page-link" href="#" onclick="SearchManager.goToPage(${this.currentPage + 1})">다음</a>
+                <a class="page-link" href="#" data-page="${this.currentPage + 1}">다음</a>
             </li>
         `;
         
         pagination.innerHTML = html;
-    },
-    
-    // 페이지 이동
-    goToPage(page) {
-        const totalPages = Math.ceil(DataManager.currentResults.length / this.pageSize);
-        if (page >= 1 && page <= totalPages) {
-            this.currentPage = page;
-            this.displayResults();
-            
-            // 스크롤 위로
-            document.getElementById('resultsTable').scrollIntoView({ behavior: 'smooth' });
-        }
-    },
-    
-    // 선택 토글
-    toggleSelection(checkbox) {
-        const index = parseInt(checkbox.dataset.index);
-        const buildingData = DataManager.currentResults[index];
         
-        DataManager.toggleBuildingSelection(buildingData);
-    },
-    
-    // 상세보기 - PDF 열기
-    showDetail(index) {
-        const item = DataManager.currentResults[index];
-        
-        console.group('🔍 PDF 상세보기');
-        console.log('선택된 항목:', item);
-        console.log('전용면적:', item['공실전용면적(평)']);
-        console.log('임대면적:', item['공실임대면적(평)']);
-        
-        // PDF 검색 매니저 사용
-        if (typeof window.PDFSearchManager !== 'undefined') {
-            // 면적 정보를 포함하여 전달
-            window.PDFSearchManager.openPDFWithSearch({
-                빌딩명: item.빌딩명,
-                출처회사: item.출처회사 || item.출처,
-                주소: item.주소,
-                인근역: item.인근역,
-                공실전용면적: item['공실전용면적(평)'] || item.공실전용면적,
-                공실임대면적: item['공실임대면적(평)'] || item.공실임대면적,
-                status: item.status  // ⭐ status 추가
-            });
-        } else {
-            // PDFSearchManager가 없을 경우 직접 처리
-            const buildingName = item.빌딩명;
-            const source = item.출처회사 || item.출처;
-            const exclusiveArea = item['공실전용면적(평)'] || item.공실전용면적;
-            const rentArea = item['공실임대면적(평)'] || item.공실임대면적;
-            
-            console.log('PDFSearchManager 없이 직접 처리');
-            console.log('출처:', source);
-            console.log('전용면적:', exclusiveArea);
-            console.log('임대면적:', rentArea);
-            
-            // 면적 정규화 (숫자만 추출)
-            const normalizeArea = (area) => {
-                if (!area || area === '-') return null;
-                const match = String(area).match(/\d+\.?\d*/);
-                return match ? match[0] : null;
-            };
-            
-            const normalizedExclusive = normalizeArea(exclusiveArea);
-            const normalizedRent = normalizeArea(rentArea);
-            
-            // PDF 파일명 생성 (PDFSearchManager의 로직과 동일하게)
-            const fileName = `${source}.pdf`;
-            
-            // URL 파라미터 구성
-            const params = new URLSearchParams({
-                file: fileName,
-                building: buildingName,
-                source: source
-            });
-            
-            // 면적 정보 추가
-            if (normalizedExclusive) {
-                params.append('exclusive', normalizedExclusive);
-            }
-            if (normalizedRent) {
-                params.append('rent', normalizedRent);
-            }
-            
-            // 면적이 있으면 area 파라미터도 추가 (우선순위: 전용면적 > 임대면적)
-            const searchArea = normalizedExclusive || normalizedRent;
-            if (searchArea) {
-                params.append('area', searchArea);
-            }
-            
-            // 면적이 없으면 검색어로 빌딩명과 주소 추가
-            if (!searchArea) {
-                const searchTerms = [];
-                if (buildingName) searchTerms.push(buildingName);
-                if (item.주소) searchTerms.push(item.주소);
-                if (searchTerms.length > 0) {
-                    params.append('search', searchTerms.join(' '));
+        // 페이지 클릭 이벤트
+        pagination.querySelectorAll('.page-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const page = parseInt(e.target.dataset.page);
+                if (page >= 1 && page <= totalPages) {
+                    this.currentPage = page;
+                    this.renderResults();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
-            }
-            
-            console.log('최종 URL 파라미터:', params.toString());
-            console.groupEnd();
-            
-            // PDF 뷰어 열기
-            window.open(`pdf-viewer.html?${params.toString()}`, '_blank');
-        }
-    },
-    
-    // 검색 초기화
-    resetSearch() {
-        // 입력 필드 초기화
-        document.querySelectorAll('input[type="text"], input[type="number"]').forEach(input => {
-            input.value = '';
+            });
         });
-        
-        // 검색 유형 초기화
-        document.getElementById('searchType').value = 'building';
-        this.switchSearchType('building');
-        
-        // 결과 초기화
-        DataManager.currentResults = [];
-        this.currentPage = 1;
-        
-        // 중복 제거 통계 초기화
-        this.duplicateStats = {
-            performSearch: { before: 0, after: 0, removed: 0 },
-            displayResults: { before: 0, after: 0, removed: 0 }
-        };
-        
-        // 테이블 초기화
-        document.getElementById('resultsBody').innerHTML = `
-            <tr>
-                <td colspan="9" class="text-center text-muted">
-                    검색 조건을 입력하고 검색 버튼을 클릭하세요.
-                </td>
-            </tr>
-        `;
-        
-        document.getElementById('resultCount').textContent = '0';
-        document.getElementById('pagination').innerHTML = '';
-        
-        console.log('🔄 검색 초기화 완료');
     }
-};
+    
+    updateSelectedSection() {
+        const section = document.getElementById('selectedBuildingsSection');
+        const list = document.getElementById('selectedBuildingsList');
+        const count = document.getElementById('selectedCount');
+        
+        count.textContent = this.selectedItems.size;
+        
+        if (this.selectedItems.size === 0) {
+            section.classList.add('d-none');
+            return;
+        }
+        
+        section.classList.remove('d-none');
+        
+        list.innerHTML = Array.from(this.selectedItems.values()).map(item => `
+            <span class="selected-building-tag">
+                ${this.escapeHtml(item.buildingName)} (${this.escapeHtml(item.floor)})
+                <button onclick="app.removeSelected('${item.id}')">&times;</button>
+            </span>
+        `).join('');
+    }
+    
+    removeSelected(id) {
+        this.selectedItems.delete(id);
+        this.updateSelectedSection();
+        
+        // 체크박스 상태 업데이트
+        const checkbox = document.querySelector(`.item-checkbox[data-id="${id}"]`);
+        if (checkbox) checkbox.checked = false;
+    }
+    
+    showImageViewer(imageUrl, title, info) {
+        document.getElementById('imageViewerTitle').textContent = title;
+        document.getElementById('imageViewerImg').src = imageUrl;
+        document.getElementById('imageViewerInfo').textContent = info;
+        document.getElementById('imageViewerDownload').href = imageUrl;
+        
+        const modal = new bootstrap.Modal(document.getElementById('imageViewerModal'));
+        modal.show();
+    }
+    
+    showSingleMarkerMap(lat, lng, name) {
+        document.getElementById('mapModalTitle').textContent = name;
+        
+        const modal = new bootstrap.Modal(document.getElementById('mapModal'));
+        modal.show();
+        
+        // 모달이 표시된 후 지도 초기화
+        setTimeout(() => {
+            if (window.MapManager) {
+                window.MapManager.showSingleMarker(lat, lng, name);
+            }
+        }, 300);
+    }
+    
+    showSelectedOnMap() {
+        if (this.selectedItems.size === 0) {
+            alert('선택된 빌딩이 없습니다.');
+            return;
+        }
+        
+        const items = Array.from(this.selectedItems.values()).filter(item => item.coordinates);
+        
+        if (items.length === 0) {
+            alert('좌표 정보가 있는 빌딩이 없습니다.');
+            return;
+        }
+        
+        document.getElementById('mapModalTitle').textContent = `선택된 빌딩 ${items.length}개`;
+        
+        const modal = new bootstrap.Modal(document.getElementById('mapModal'));
+        modal.show();
+        
+        setTimeout(() => {
+            if (window.MapManager) {
+                window.MapManager.showMultipleMarkers(items);
+            }
+        }, 300);
+    }
+    
+    showLoading(text = '로딩 중...') {
+        document.getElementById('loadingText').textContent = text;
+        document.getElementById('loadingOverlay').classList.remove('d-none');
+        this.isLoading = true;
+    }
+    
+    hideLoading() {
+        document.getElementById('loadingOverlay').classList.add('d-none');
+        this.isLoading = false;
+    }
+    
+    showError(message) {
+        alert(message);
+    }
+    
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+}
 
-// 페이지 로드시 초기화
+// 앱 초기화
+let app;
 document.addEventListener('DOMContentLoaded', () => {
-    SearchManager.init();
+    app = new LeasingSearchApp();
 });
